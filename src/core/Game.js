@@ -16,6 +16,11 @@ import { CameraController } from '../camera/CameraController.js';
 import { HUD } from '../ui/HUD.js';
 import { clamp } from '../util/math.js';
 import { installTestHooks } from './TestHooks.js';
+import { VFX } from '../fx/VFX.js';
+import { VehicleFX } from '../fx/VehicleFX.js';
+import { Stunts } from '../game/Stunts.js';
+import { PhotoMode } from '../camera/PhotoMode.js';
+import { WATER_Y } from '../world/Layout.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -81,6 +86,23 @@ export class Game {
     this.hud = new HUD(this.settings);
     this.hud.show(true);
     this.insideQueryGroups = groups(QUERY, G.STATIC);
+    this.vfx = new VFX(this);
+    this.vfx.attachPlayerJets(this.playerVisual);
+    this.playerFX = new VehicleFX(this.vfx, this.player, { isPlayer: true });
+    this.stunts = new Stunts(this);
+    this.photo = new PhotoMode(this);
+    this.player.onLaunch = () => this.onLaunch();
+    this.player.onHop = () => this.vfx.dustBurst(this.player.position.clone().setY(this.player.position.y - 0.5), 14, 7);
+    this.playerVisual.onPartLost = (name, mesh) => {
+      const p = mesh.getWorldPosition(new THREE.Vector3());
+      this.vfx.spawnDebris(p, this.player.velocity, 'carbon', 3);
+    };
+    this.water = { submerged: 0, splashed: false };
+    this.takedownCam = { cooldown: 0 };
+    this.hintsTimer = 60;
+    this.showHints = true;
+    this.events.on('propBreak', (e) => this.onPropBreak(e));
+    this.world.extraStreaks = (s) => this.addCarStreaks(s);
 
     const missing = this.world.selfCheck();
     if (missing) console.warn(`Collider self-check: ${missing} static meshes without colliders`);
@@ -110,7 +132,7 @@ export class Game {
     this.input.update();
     this.handleGlobalKeys();
 
-    // Time scale: slow motion and hit stop.
+    // Time scale: slow motion and hit stop (paused in photo mode / menus).
     if (this.slowmo.timer > 0) {
       this.slowmo.timer -= realDt;
       if (this.slowmo.timer <= 0) this.slowmo.scale = 1;
@@ -120,6 +142,7 @@ export class Game {
       this.hitStop -= realDt;
       scale = 0;
     }
+    if (this.state !== 'playing') scale = 0;
     this.timeScale = scale;
     const dt = realDt * scale;
     this.time += dt;
@@ -131,9 +154,16 @@ export class Game {
     }
     this.playerVisual.update(dt, this.player);
     for (const n of this.npcs) n.model.update(dt, n.vehicle, n.ctx || {});
-    this.cameraCtl.update(dt, realDt, this.player, this.playerVisual.root, { pursuit: false });
+    if (this.state === 'photo') this.photo.update(realDt);
+    else this.cameraCtl.update(dt, realDt, this.player, this.playerVisual.root, { pursuit: this.pursuitActive || false });
     this.world.update(dt, this.playerVisual.root.position, this.camera, this.player.velocity);
+    this.playerVisual.root.updateMatrixWorld();
+    this.vfx.updateJets(dt, this.player);
+    this.playerFX.update(dt, { wet: this.isWet() });
+    this.updateSmokeLighting(realDt);
+    this.vfx.update(dt, realDt);
     this.hud.update(realDt, this.player);
+    this.updateHints(realDt);
     this.updateFx(realDt);
     this.physics.updateDebug();
     this.gfx.render(realDt);
@@ -151,7 +181,15 @@ export class Game {
       this.showColliders = !this.showColliders;
       this.physics.setDebug(this.scene, this.showColliders);
     }
+    if (i.pressed('photo') && (this.state === 'playing')) {
+      this.photo.toggle();
+      return;
+    }
     if (this.state !== 'playing') return;
+    if (i.pressed('help')) {
+      this.showHints = !this.showHints;
+      this.hintsTimer = this.showHints ? 1e9 : 0;
+    }
     if (i.pressed('camera')) this.cameraCtl.cycle();
     if (i.pressed('doors')) this.playerVisual.toggleDoors();
     if (i.pressed('modeTrack')) this.player.setMode('track');
@@ -290,11 +328,23 @@ export class Game {
     }
     this.cameraCtl.addShake(clamp(s / 30, 0.15, 1));
     this.input.rumble(clamp(s / 25, 0.2, 1), 200);
+    // Sparks and debris at the contact point.
+    _v.copy(info.normal).setY(Math.abs(info.normal.y) + 0.3);
+    this.vfx.sparksAt(info.point, _v, clamp(s * 1.5, 6, 50), clamp(s * 0.6, 6, 20));
+    if (s > 10) this.vfx.spawnDebris(info.point, v.velocity, s > 25 ? 'paint' : 'metal', Math.min(6, Math.floor(s / 8)));
+    if (s > 18) this.vfx.glassBurst(info.point, v.velocity, s);
     if (s > 14) this.hitStop = Math.max(this.hitStop, 0.06);
+    if (s > 22) {
+      this.vfx.screenCrack(clamp(s / 40, 0.4, 1));
+      this.gfx.setFlash(0.25, 0xffffff);
+    }
     if (info.headOn) {
+      // Wreck: short slow motion and heavy damage.
       this.slowmo.scale = 0.3;
       this.slowmo.timer = 0.6;
       v.damage(25);
+      this.vfx.spawnDebris(info.point, v.velocity, 'paint', 6);
+      this.events.emit('wreck', { vehicle: v });
     }
     this.events.emit('impact', { vehicle: v, info, damage: dmg });
   }
@@ -302,11 +352,140 @@ export class Game {
   onPlayerLand(v, airTime, vy) {
     this.cameraCtl.dip = clamp(-vy / 12, 0.2, 1.5);
     this.cameraCtl.addShake(clamp(-vy / 30, 0.05, 0.6));
+    this.input.rumble(clamp(-vy / 20, 0.2, 1), 160);
+    const gp = v.position.clone().setY(v.position.y - 0.5);
+    if (airTime > 0.6) {
+      if (this.isWet()) this.vfx.splash(gp, clamp(-vy / 25, 0.3, 0.9));
+      else this.vfx.dustBurst(gp, 18, clamp(-vy / 2, 4, 10));
+      this.vfx.ring(gp, this.isWet() ? 0x9fd0ff : 0xb0a090, clamp(-vy / 1.5, 4, 12), 0.6);
+    }
+    if (vy < -12) this.vfx.sparksAt(gp, new THREE.Vector3(0, 1, 0), 20, 8);
+    this.stunts.onLand(v, airTime, vy);
     this.events.emit('land', { vehicle: v, airTime });
   }
 
   updateGameplay(dt, realDt) {
-    // Filled in by later systems (police, missions, scoring).
+    this.stunts.update(dt, realDt, this.player, this.input);
+    this.updateWater(realDt);
+    this.takedownCam.cooldown = Math.max(0, this.takedownCam.cooldown - realDt);
+    if (this.systems) for (const s of this.systems) s.update(dt, realDt);
+  }
+
+  isWet() {
+    const p = this.world.env.preset;
+    return (p.rain && this.settings.get('rain')) || (p.wet ?? 1) > 1.2;
+  }
+
+  // Driving into the bay or the canal: splash, sink, reset to the nearest road.
+  updateWater(realDt) {
+    const p = this.player;
+    const w = this.water;
+    if (p.position.y < WATER_Y + 0.1) {
+      if (!w.splashed) {
+        w.splashed = true;
+        this.vfx.splash(new THREE.Vector3(p.position.x, WATER_Y, p.position.z), clamp(p.speed / 20, 0.6, 2));
+        this.cameraCtl.addShake(0.4);
+        this.events.emit('splash', { vehicle: p });
+      }
+      w.submerged += realDt;
+      // Water drag.
+      const lv = p.body.linvel();
+      p.body.setLinvel({ x: lv.x * 0.96, y: Math.max(lv.y * 0.9, -3), z: lv.z * 0.96 }, true);
+      this.hud.prompt('IN THE WATER');
+      if (w.submerged > 1.6) {
+        p.damage(10);
+        this.resetPlayer();
+      }
+    } else {
+      w.submerged = 0;
+      w.splashed = false;
+    }
+  }
+
+  onLaunch() {
+    const p = this.player;
+    this.cameraCtl.kick = 1.2;
+    this.cameraCtl.fovPunch = 6;
+    this.cameraCtl.addShake(0.25);
+    for (const w of p.wheels) if (!w.front) for (let k = 0; k < 10; k++) this.vfx.tireSmoke(w.contact, p.velocity, 1);
+    this.events.emit('launch', { vehicle: p });
+  }
+
+  onPropBreak(e) {
+    const t = e.item.type.name;
+    const v = e.vehicle;
+    const p = e.position;
+    if (t === 'hydrant') this.vfx.addEmitter({ type: 'hydrant', pos: p.clone().setY(p.y - 0.4), duration: 14 });
+    if (t === 'lamp' || t === 'highwayLamp' || t === 'signal') {
+      this.vfx.sparksAt(p.clone().setY(p.y + 0.5), new THREE.Vector3(0, 1, 0), 18, 9);
+      this.vfx.glassBurst(p.clone().setY(p.y + 6), e.velocity, 16);
+    }
+    if (t === 'busStop' || t === 'stall') this.vfx.glassBurst(p.clone().setY(p.y + 1), e.velocity, 40);
+    if (t === 'barrier' || t === 'fence' || t === 'bench') this.vfx.spawnDebris(p, e.velocity, 'metal', 2);
+    if (v === this.player) {
+      this.cameraCtl.addShake(Math.min(0.35, e.item.type.mass / 600));
+      this.input.rumble(0.3, 90);
+    }
+  }
+
+  // Player tail/brake lights and headlights on the wet road.
+  addCarStreaks(s) {
+    const v = this.player;
+    if (v.energy.ghost) return;
+    const m = this.playerVisual;
+    const gy = v.position.y - 0.55;
+    const tail = v.braking ? 1.4 : 0.55;
+    for (const side of [-0.7, 0.7]) {
+      _v.set(side, 0.35, 2.1).applyQuaternion(v.quaternion).add(v.position);
+      s.add(_v.x, _v.y, _v.z, gy, 0xff1020, tail, 0.7);
+      _v.set(side * 0.9, 0.12, -2.0).applyQuaternion(v.quaternion).add(v.position);
+      s.add(_v.x, _v.y, _v.z, gy, 0xfff0dd, 0.7, 0.8);
+    }
+    if (this.extraCarStreaks) this.extraCarStreaks(s);
+    void m;
+  }
+
+  // Burnout-style slow-motion crash shot of a police unit. Max once every 6 s.
+  startTakedownCam(target) {
+    if (this.takedownCam.cooldown > 0 || this.stunts.coldSnap.active || this.state !== 'playing') return false;
+    this.takedownCam.cooldown = 6;
+    const tp = target.position.clone();
+    const side = new THREE.Vector3(-target.velocity.z, 0, target.velocity.x).normalize();
+    if (side.lengthSq() < 0.5) side.set(1, 0, 0);
+    const camPos = tp.clone().addScaledVector(side, 7).add(new THREE.Vector3(0, 1.2, 0)).addScaledVector(target.velocity, 0.25);
+    this.cameraCtl.collide(tp.clone().setY(tp.y + 1), camPos, camPos);
+    this.slowmo.scale = 0.22;
+    this.slowmo.timer = 1.2;
+    this.hitStop = Math.max(this.hitStop, 0.06);
+    this.cameraCtl.playShot({ type: 'fixed', position: camPos, target, fov: 40, lookY: 0.4, duration: 1.2 * 0.22 });
+    // Duration is in game time (scaled) so it ends with the slow motion.
+    this.cameraCtl.shot.duration = 0.27;
+    this.events.emit('takedownCam', { target });
+    return true;
+  }
+
+  // Tint smoke by ambient light plus nearby street lamps (sodium orange).
+  updateSmokeLighting(realDt) {
+    this.smokeLightTimer = (this.smokeLightTimer || 0) - realDt;
+    if (this.smokeLightTimer > 0) return;
+    this.smokeLightTimer = 0.3;
+    const env = this.world.env;
+    const c = new THREE.Color().copy(env.hemi.color).multiplyScalar(env.hemi.intensity * 0.55);
+    const near = this.world.props.nearestLamps(this.player.position, 3);
+    for (const l of near) {
+      const d = Math.hypot(l.x - this.player.position.x, l.z - this.player.position.z);
+      c.add(new THREE.Color(l.type.cool ? 0x8fb0ff : 0xffa050).multiplyScalar(0.35 * Math.max(0, 1 - d / 30) * env.preset.lampScale));
+    }
+    this.vfx.setAmbient(c);
+  }
+
+  updateHints(realDt) {
+    this.hintsTimer -= realDt;
+    const show = this.showHints && this.hintsTimer > 0 && this.state === 'playing';
+    if (show !== this.hintsShown) {
+      this.hintsShown = show;
+      this.hud.setHints(show ? HINTS_HTML : null);
+    }
   }
 
   updateFx(realDt) {
@@ -316,6 +495,9 @@ export class Game {
     fx.speedBlur += ((boost ? 0.55 : 0) + Math.max(0, (p.speed - 70) / 140) * 0.25 - fx.speedBlur) * Math.min(1, realDt * 4);
     fx.aberration += ((boost ? 1 : 0) - fx.aberration) * Math.min(1, realDt * 5);
     fx.ghost += ((p.energy.ghost ? 1 : 0) - fx.ghost) * Math.min(1, realDt * 4);
+    fx.lines += ((boost ? 1 : Math.max(0, (p.speed - 85) / 40)) - fx.lines) * Math.min(1, realDt * 4);
+    const raining = this.world.env.preset.rain && this.settings.get('rain');
+    fx.rainLens += ((raining && p.speed > 12 ? Math.min(1, p.speed / 60) : 0) - fx.rainLens) * Math.min(1, realDt * 2);
     const hpFrac = p.hp / p.maxHp;
     fx.damage = hpFrac < 0.3 ? (0.25 + 0.25 * Math.sin(this.time * 6)) * (1 - hpFrac / 0.3) : 0;
   }
@@ -360,6 +542,12 @@ export class Game {
     }
   }
 }
+
+const HINTS_HTML = [
+  ['W / S', 'Throttle / Brake'], ['A / D', 'Steer'], ['Shift', 'Rear Rockets'], ['Space', 'Hover Jets (tap mid-air: Cold Snap)'],
+  ['Ctrl', 'Handbrake'], ['Q / E', 'Air roll'], ['F', 'Ghost Mode (hold)'], ['1 2 3', 'Track / Drift / Flight'],
+  ['C', 'Camera'], ['G', 'Doors'], ['R', 'Reset'], ['P', 'Photo mode'], ['H', 'Hide controls'],
+].map(([k, d]) => `<b>${k}</b>${d}`).join('<br>');
 
 function nextFrame() {
   return new Promise((r) => requestAnimationFrame(() => r()));

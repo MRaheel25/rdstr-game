@@ -15,6 +15,9 @@ const _desired = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
 const _up = new THREE.Vector3(0, 1, 0);
+const _cFrom = new THREE.Vector3();
+const _cTo = new THREE.Vector3();
+const _cDir = new THREE.Vector3();
 
 export class CameraController {
   constructor(camera, physics, settings) {
@@ -67,21 +70,23 @@ export class CameraController {
     this.shot = null;
   }
 
-  // Sphere cast from `from` toward `to`; returns safe point.
+  // Sphere cast from `from` toward `to`; writes the safe point into `out` (may alias `to`).
   collide(from, to, out) {
-    _v.subVectors(to, from);
-    const len = _v.length();
-    if (len < 0.01) return out.copy(to);
-    _v.divideScalar(len);
+    _cFrom.copy(from);
+    _cTo.copy(to);
+    _cDir.subVectors(_cTo, _cFrom);
+    const len = _cDir.length();
+    if (len < 0.01) return out.copy(_cTo);
+    _cDir.divideScalar(len);
     const hit = this.physics.world.castShape(
-      from, { x: 0, y: 0, z: 0, w: 1 }, _v, this.ball, 0, len, true,
+      _cFrom, { x: 0, y: 0, z: 0, w: 1 }, _cDir, this.ball, 0, len, true,
       this.physics.R.QueryFilterFlags.EXCLUDE_SENSORS, this.castGroups,
     );
     if (hit) {
       const d = Math.max(0.5, hit.time_of_impact - 0.15);
-      return out.copy(from).addScaledVector(_v, d);
+      return out.copy(_cFrom).addScaledVector(_cDir, d);
     }
-    return out.copy(to);
+    return out.copy(_cTo);
   }
 
   update(dt, realDt, car, visual, state) {

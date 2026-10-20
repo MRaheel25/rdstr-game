@@ -34,7 +34,7 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 - [x] **M1 — Setup, collision and vehicle physics on a test city block**
 - [x] M2 — Full city world, lighting, sky, atmosphere and post-processing
 - [x] M3 — Roadster and police models
-- [ ] M4 — VFX, camera and game feel
+- [x] M4 — VFX, camera and game feel
 - [ ] M5 — Police AI and heat system
 - [ ] M6 — Audio
 - [ ] M7 — Missions, races, scoring and progression
@@ -75,9 +75,23 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
   (rotors, searchlight spot + beam), pursuit drone (rotors, strobes, EMP ring). Shared LightBar strobe pattern.
 - Draw-call control: wheels merged per material; police units bake a single-mesh LOD for distance.
 
+## M4 results
+- `fx/Particles.js`: instanced GPU particle systems (billboards + velocity-stretched streaks), skid-mark ribbon ring buffer.
+- `fx/VFX.js`: tyre smoke lit by ambient + nearby lamps, sparks, glass shards, dust, water splashes, frost, fire,
+  expanding rings, flash lights, explosions (fireball, smoke column, shockwave ring, flash), timed emitters (broken
+  hydrants spray, burning wrecks, battery smoke), pooled physics debris (cleaned after 8 s), screen-crack overlay,
+  directional cold-gas jets with shock diamonds from the real nozzle positions (rocket, cold-gas outlets, hover, RCS).
+- `fx/VehicleFX.js`: per-wheel smoke, skid marks, dirt dust, wet spray, rim sparks (popped tyres), scraping sparks.
+- `game/Stunts.js`: air time, height, flips / barrel rolls / spins, perfect landings, Cold Snap (tap Space > 8 m up:
+  1.5 s at 0.25x, orbit cam, frost grade, frost shockwave on landing that shoves and damages police).
+- Game feel: launch control kick + smoke, landing dust/water ring + camera dip, hit stop, wreck slow-mo, screen flash,
+  takedown cam (`Game.startTakedownCam`, 6 s cooldown), water splash + reset, speed lines, chromatic aberration,
+  radial blur, raindrops sliding on the lens at speed, FOV punch.
+- Photo Mode (P): pauses, free camera, depth of field focused on the car, 5 filters, UI hidden.
+- Control hints shown for the first minute (H toggles).
+
 ## Next
-- M4: VFX (tire smoke, skid marks, sparks, debris, thruster jets, rocket plume, explosions, splashes), camera feel,
-  Cold Snap, takedown cam, hit stop, screen effects.
+- M5: police AI (pursuit, PIT, boxing, roadblocks, spike strips, helicopter, drones), heat & evade system, traffic.
 
 ## Known issues
 - Ramp/merge geometry on the Highway Ring is functional but simple (taper merge, no exit lanes except via the same ramps).

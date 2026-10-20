@@ -92,7 +92,7 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
   padding: 8px 20px; background: var(--panel); border: 1px solid var(--cyan-dim);
 }
 #hints {
-  position: absolute; right: 22px; top: 50%; transform: translateY(-60%); font-size: 12px; line-height: 1.7;
+  position: absolute; right: 22px; top: 96px; font-size: 12px; line-height: 1.65;
   background: var(--panel); padding: 10px 14px; border-left: 2px solid var(--cyan); max-width: 260px;
 }
 #hints b { color: var(--cyan); font-family: var(--mono); display: inline-block; min-width: 64px; }

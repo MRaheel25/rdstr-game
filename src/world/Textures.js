@@ -305,29 +305,35 @@ export function radial(inner = 'rgba(255,255,255,1)', outer = 'rgba(255,255,255,
   });
 }
 
-// Puffy smoke sprite with some internal structure.
+// Puffy smoke sprite: many soft blobs with noise, faded to an irregular edge.
 export function smokeSprite() {
   return cached('smoke', () => {
     const S = 128;
     const c = canvas(S, S);
     const x = c.getContext('2d');
     const rng = new RNG(21);
-    for (let i = 0; i < 26; i++) {
-      const r = rng.float(14, 40);
-      const px = S / 2 + rng.float(-26, 26);
-      const py = S / 2 + rng.float(-26, 26);
+    x.clearRect(0, 0, S, S);
+    for (let i = 0; i < 60; i++) {
+      const a = rng.float(0, Math.PI * 2);
+      const d = Math.pow(rng.next(), 0.7) * 34;
+      const r = rng.float(8, 26);
+      const px = S / 2 + Math.cos(a) * d;
+      const py = S / 2 + Math.sin(a) * d;
       const g = x.createRadialGradient(px, py, 0, px, py, r);
-      g.addColorStop(0, 'rgba(255,255,255,0.22)');
+      g.addColorStop(0, `rgba(255,255,255,${rng.float(0.08, 0.2)})`);
       g.addColorStop(1, 'rgba(255,255,255,0)');
       x.fillStyle = g;
       x.fillRect(0, 0, S, S);
     }
-    const mask = x.createRadialGradient(S / 2, S / 2, S * 0.25, S / 2, S / 2, S / 2);
-    mask.addColorStop(0, 'rgba(0,0,0,1)');
-    mask.addColorStop(1, 'rgba(0,0,0,0)');
-    x.globalCompositeOperation = 'destination-in';
-    x.fillStyle = mask;
-    x.fillRect(0, 0, S, S);
+    const img = x.getImageData(0, 0, S, S);
+    for (let i = 0; i < S * S; i++) {
+      const px = i % S;
+      const py = Math.floor(i / S);
+      const dd = Math.hypot(px - S / 2, py - S / 2) / (S / 2);
+      const mask = Math.max(0, 1 - dd * dd * 1.15);
+      img.data[i * 4 + 3] = Math.min(255, img.data[i * 4 + 3] * mask * (0.75 + rng.next() * 0.5));
+    }
+    x.putImageData(img, 0, 0);
     return finish(c, { repeat: false });
   });
 }

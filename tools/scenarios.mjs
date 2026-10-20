@@ -219,4 +219,59 @@ export default {
       await shot(name);
     }
   },
+
+  async fx({ page, sleep, shot }) {
+    const tp = (x, y, z, yaw, speed) => page.evaluate(([x, y, z, yaw, speed]) => __game.test.teleport(x, y, z, yaw, speed), [x, y, z, yaw, speed]);
+    // Drift on Harbor Blvd.
+    await tp(-300, 0.7, 676, -Math.PI / 2, 22);
+    await page.keyboard.press('Digit2');
+    await page.keyboard.down('KeyW');
+    await page.keyboard.down('KeyD');
+    await page.keyboard.down('ControlLeft');
+    await sleep(500);
+    await page.keyboard.up('ControlLeft');
+    await sleep(2500);
+    await shot('drift');
+    await page.keyboard.up('KeyD');
+    await page.keyboard.up('KeyW');
+    // Rockets down the boulevard.
+    await page.keyboard.press('Digit1');
+    await tp(-200, 0.7, 676, -Math.PI / 2, 40);
+    await page.keyboard.down('KeyW');
+    await page.keyboard.down('ShiftLeft');
+    await sleep(1800);
+    await shot('rockets');
+    await page.keyboard.up('ShiftLeft');
+    await page.keyboard.up('KeyW');
+    // Airborne over the yard: Cold Snap.
+    await tp(100, 30, 760, -Math.PI / 2, 30);
+    await sleep(600);
+    await page.keyboard.press('Space');
+    await sleep(700);
+    await shot('coldsnap');
+    await page.keyboard.down('KeyQ');
+    await sleep(900);
+    await page.keyboard.up('KeyQ');
+    await sleep(2500);
+    await shot('landed');
+    // Explosion in front of the car.
+    await page.evaluate(() => {
+      const p = __game.player.position.clone().addScaledVector(__game.player.forward, 14);
+      __game.vfx.explosion(p, 1.2);
+    });
+    await sleep(500);
+    await shot('explosion');
+    // Hover jets.
+    await tp(0, 6, 700, Math.PI, 5);
+    await page.keyboard.down('Space');
+    await sleep(900);
+    await shot('hover');
+    await page.keyboard.up('Space');
+    // Photo mode.
+    await sleep(1500);
+    await page.keyboard.press('KeyP');
+    await sleep(1200);
+    await shot('photo');
+    await page.keyboard.press('KeyP');
+  },
 };
