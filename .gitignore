@@ -1,0 +1,4 @@
+node_modules/
+.DS_Store
+screenshots/*_log.txt
+screenshots/dbg_*
