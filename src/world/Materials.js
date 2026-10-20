@@ -17,14 +17,14 @@ export function buildingMaterial() {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec4 aFacade;
-varying vec4 vFacade;
+flat varying vec4 vFacade;
 varying vec2 vMeters;`)
       .replace('#include <uv_vertex>', `#include <uv_vertex>
 vFacade = aFacade;
 vMeters = uv;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
-varying vec4 vFacade;
+flat varying vec4 vFacade;
 varying vec2 vMeters;
 uniform float uTime;
 float fh(vec2 p) {
@@ -68,7 +68,7 @@ float gGlass = 0.0;`)
     float ir = fh(id + 7.3 + seed);
     float intensity = ir > 0.93 ? 2.2 : mix(0.25, 0.9, ir);
     // Fade window detail at distance to an average glow to avoid shimmering.
-    float far = smoothstep(0.12, 0.45, lodW);
+    float far = smoothstep(0.18, 0.55, lodW);
     vec3 glassCol = vec3(0.03, 0.045, 0.06);
     // Shop fronts: big bright glazing on the ground floor.
     if (groundFloor > 0.5 && style < 3.5) {
@@ -80,13 +80,13 @@ float gGlass = 0.0;`)
       intensity = 1.1;
     }
     vec3 emis = lc * lit * win * intensity;
-    vec3 avgEmis = vec3(0.85, 0.72, 0.55) * vFacade.w * 0.22;
+    vec3 avgEmis = vec3(0.85, 0.7, 0.5) * vFacade.w * 0.24;
     if (groundFloor < 0.5) {
       emis = mix(emis, avgEmis, far);
       win = mix(win, 0.4, far);
     }
-    diffuseColor.rgb = mix(wall, glassCol, win);
-    gGlass = win;
+    diffuseColor.rgb = mix(wall, glassCol, win) * (1.0 - far * 0.35);
+    gGlass = win * (1.0 - far);
     gWinEmissive = emis;
   } else if (style < -0.5) {
     // Roof: dark gravel/membrane.
@@ -98,8 +98,12 @@ roughnessFactor = mix(roughnessFactor, 0.08, gGlass);`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
 metalnessFactor = mix(metalnessFactor, 0.85, gGlass * 0.8);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-totalEmissiveRadiance += gWinEmissive;`);
+totalEmissiveRadiance += gWinEmissive;
+#ifdef DEBUG_FACADE
+totalEmissiveRadiance = vec3(fract(vMeters.x / 2.7), fract(vMeters.y / 3.4), 0.0);
+#endif`);
   };
+  if (new URLSearchParams(location.search).get('dbgfacade')) m.defines = { DEBUG_FACADE: 1 };
   m.customProgramCacheKey = () => 'building-v1';
   materials.building = m;
   return m;
@@ -109,7 +113,7 @@ export function roadMaterial() {
   if (materials.road) return materials.road;
   const t = Tex.asphalt();
   const m = new THREE.MeshStandardMaterial({
-    map: t.map, roughnessMap: t.roughnessMap, roughness: 1, metalness: 0.0, color: 0x9a9aa0, envMapIntensity: 1.6,
+    map: t.map, roughnessMap: t.roughnessMap, roughness: 1, metalness: 0.0, color: 0x9a9aa0, envMapIntensity: 0.7,
   });
   materials.road = m;
   return m;
@@ -143,7 +147,7 @@ export function groundMaterial(kind = 'concrete') {
 
 export function concreteMaterial() {
   if (materials.concrete) return materials.concrete;
-  const m = new THREE.MeshStandardMaterial({ map: Tex.groundTex('concrete'), roughness: 0.78, metalness: 0.0, color: 0xb0aca6 });
+  const m = new THREE.MeshStandardMaterial({ map: Tex.groundTex('concrete'), roughness: 0.78, metalness: 0.0, color: 0xb0aca6, side: THREE.DoubleSide });
   materials.concrete = m;
   return m;
 }
@@ -151,7 +155,7 @@ export function concreteMaterial() {
 export function metalMaterial(color = 0x6a6e74) {
   const key = 'metal_' + color;
   if (materials[key]) return materials[key];
-  const m = new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.85 });
+  const m = new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.85, side: THREE.DoubleSide });
   materials[key] = m;
   return m;
 }
@@ -168,6 +172,13 @@ export function emissiveMaterial(color, intensity = 3) {
   if (materials[key]) return materials[key];
   const m = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(intensity), toneMapped: true });
   materials[key] = m;
+  return m;
+}
+
+export function paintedMaterial() {
+  if (materials.painted) return materials.painted;
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.45, side: THREE.DoubleSide });
+  materials.painted = m;
   return m;
 }
 

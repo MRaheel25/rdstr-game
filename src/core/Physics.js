@@ -44,37 +44,41 @@ export class Physics {
   }
 
   // ---- creation helpers -------------------------------------------------
+  // All static colliders hang off one fixed body (cheaper than a body per collider).
+  get staticBody() {
+    if (!this._static) this._static = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+    return this._static;
+  }
+
   fixedBox(cx, cy, cz, hx, hy, hz, opts = {}) {
-    const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(cx, cy, cz);
-    if (opts.rotation) bodyDesc.setRotation(opts.rotation);
-    const body = this.world.createRigidBody(bodyDesc);
     const r = opts.round ? Math.min(opts.round, hx * 0.5, hy * 0.9, hz * 0.5) : 0;
     const desc = (r > 0 ? RAPIER.ColliderDesc.roundCuboid(hx - r, hy - r, hz - r, r) : RAPIER.ColliderDesc.cuboid(hx, hy, hz))
+      .setTranslation(cx, cy, cz)
       .setFriction(opts.friction ?? 0.7)
       .setRestitution(opts.restitution ?? 0.05)
       .setCollisionGroups(groups(opts.group ?? G.STATIC));
+    if (opts.rotation) desc.setRotation(opts.rotation);
     if (opts.sensor) desc.setSensor(true);
-    const col = this.world.createCollider(desc, body);
-    this.meta.set(col.handle, { kind: opts.kind || 'static', ref: opts.ref || null });
+    const col = this.world.createCollider(desc, this.staticBody);
+    this.meta.set(col.handle, { kind: opts.kind || 'static', ref: opts.ref || null, surface: opts.surface });
     return col;
   }
 
   fixedTrimesh(vertices, indices, opts = {}) {
-    const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+    const body = this.staticBody;
     const desc = RAPIER.ColliderDesc.trimesh(vertices, indices)
       .setFriction(opts.friction ?? 0.9)
       .setRestitution(0.02)
       .setCollisionGroups(groups(opts.group ?? G.STATIC));
     const col = this.world.createCollider(desc, body);
-    this.meta.set(col.handle, { kind: opts.kind || 'static', ref: opts.ref || null });
+    this.meta.set(col.handle, { kind: opts.kind || 'static', ref: opts.ref || null, surface: opts.surface });
     return col;
   }
 
   fixedHeightfield(nrows, ncols, heights, scale, center, opts = {}) {
-    const body = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed().setTranslation(center.x, center.y, center.z),
-    );
+    const body = this.staticBody;
     const desc = RAPIER.ColliderDesc.heightfield(nrows, ncols, heights, scale)
+      .setTranslation(center.x, center.y, center.z)
       .setFriction(opts.friction ?? 0.9)
       .setCollisionGroups(groups(opts.group ?? G.STATIC));
     const col = this.world.createCollider(desc, body);
@@ -85,9 +89,7 @@ export class Physics {
   removeCollider(col) {
     if (!col) return;
     this.meta.delete(col.handle);
-    const body = col.parent();
     this.world.removeCollider(col, false);
-    if (body && body.numColliders() === 0) this.world.removeRigidBody(body);
   }
 
   removeBody(body) {

@@ -14,8 +14,8 @@ export const CURB_H = 0.12;
 export const CHUNK = 240;
 
 const WALL_COLORS = [
-  [0.42, 0.43, 0.45], [0.55, 0.52, 0.48], [0.3, 0.33, 0.37], [0.5, 0.36, 0.3],
-  [0.62, 0.6, 0.56], [0.22, 0.25, 0.3], [0.45, 0.47, 0.5], [0.36, 0.3, 0.28],
+  [0.3, 0.31, 0.33], [0.4, 0.38, 0.35], [0.2, 0.23, 0.27], [0.38, 0.26, 0.22],
+  [0.46, 0.44, 0.41], [0.15, 0.17, 0.21], [0.33, 0.35, 0.38], [0.26, 0.22, 0.2],
 ];
 
 export class CityGenerator {
@@ -28,10 +28,23 @@ export class CityGenerator {
     this.chunks = new Map();
     this.staticMeshes = [];
     this.buildings = []; // { x, z, hx, hz, h, rot }
+    this.Batch = GeometryBatch;
+    this.groundHeight = () => 0;
     this.root = new THREE.Group();
     this.root.name = 'city';
     this.scene.add(this.root);
     this.markings = new GeometryBatch({ color: true });
+    this.skyline = new GeometryBatch({ facade: true, color: true });
+    this.steamSpots = [];
+    this.fountains = [];
+    this.airStations = [];
+    this.hideSpots = [];
+    this.jumps = [];
+    this.lots = [];
+    this.groundRoads = [];
+    this.tunnelLights = [];
+    this.tunnels = [];
+    this.beacons = [];
   }
 
   chunk(x, z) {
@@ -43,6 +56,7 @@ export class CityGenerator {
         cx: (Math.floor(x / CHUNK) + 0.5) * CHUNK,
         cz: (Math.floor(z / CHUNK) + 0.5) * CHUNK,
         buildings: new GeometryBatch({ facade: true, color: true }),
+        containers: new GeometryBatch({ color: true }),
         road: new GeometryBatch(),
         sidewalk: new GeometryBatch(),
         concrete: new GeometryBatch(),
@@ -50,6 +64,24 @@ export class CityGenerator {
       this.chunks.set(key, c);
     }
     return c;
+  }
+
+  // Lazily created per-chunk batch by material name.
+  batch(x, z, name, opts = {}) {
+    const c = this.chunk(x, z);
+    if (!c[name]) c[name] = new GeometryBatch(opts);
+    return c[name];
+  }
+
+  // Static box with matching collider in one call.
+  solidBox(batchName, cx, cy, cz, sx, sy, sz, rot = 0, opts = {}) {
+    const b = this.batch(cx, cz, batchName, opts.batchOpts || {});
+    if (opts.color) b.setColor(...opts.color);
+    b.box(cx, cy, cz, sx, sy, sz, rot, { uvScale: opts.uvScale ?? 0.25 });
+    this.physics.fixedBox(cx, cy, cz, sx / 2, sy / 2, sz / 2, {
+      kind: opts.kind || 'building', rotation: rot ? { x: 0, y: Math.sin(rot / 2), z: 0, w: Math.cos(rot / 2) } : undefined,
+      friction: opts.friction,
+    });
   }
 
   addStatic(mesh, hasCollider, { shadows = true } = {}) {
@@ -209,14 +241,12 @@ export class CityGenerator {
     const sx = x1 - x0;
     const sz = z1 - z0;
     const c = this.chunk(cx, cz);
+    this.lots.push({ x0, z0, x1, z1, info });
     // Sidewalk slab (curb is its side).
     c.sidewalk.box(cx, CURB_H / 2, cz, sx, CURB_H, sz, 0, { uvScale: 1 / 5 });
     this.physics.fixedBox(cx, CURB_H / 2, cz, sx / 2, CURB_H / 2, sz / 2, { kind: 'sidewalk', friction: 0.85, round: 0.06 });
     if (info.kind === 'empty') return;
-    if (info.kind === 'plaza' || info.kind === 'park') {
-      this.lotFeatures?.(info, x0, z0, x1, z1);
-      return;
-    }
+    if (info.kind !== 'downtown') return;
     const inset = SIDEWALK_W;
     const bx0 = x0 + inset;
     const bx1 = x1 - inset;
@@ -278,6 +308,10 @@ export class CityGenerator {
     for (let t = 0; t < tiers; t++) {
       const th = t === tiers - 1 ? remaining : remaining * rng.float(0.45, 0.65);
       b.box(cx, y + th / 2, cz, tx, th, tz, 0, { baseY: base });
+      // Low-detail copy for the distant skyline (slightly inset so it hides inside when near).
+      this.skyline.curColor = b.curColor;
+      this.skyline.curFacade = b.curFacade;
+      this.skyline.box(cx, y + th / 2 - 0.2, cz, tx - 0.8, th - 0.4, tz - 0.8, 0, { baseY: base - 0.4 });
       this.physics.fixedBox(cx, y + th / 2, cz, tx / 2, th / 2, tz / 2, { kind: 'building' });
       this.buildings.push({ x: cx, z: cz, hx: tx / 2, hz: tz / 2, y0: y, h: th });
       y += th;
@@ -345,6 +379,37 @@ export class CityGenerator {
         m.castShadow = false;
       }
       if (!c.concrete.empty) this.addStatic(new THREE.Mesh(c.concrete.toGeometry(), M.concreteMaterial()), true);
+      if (c.deck && !c.deck.empty) this.addStatic(new THREE.Mesh(c.deck.toGeometry(), M.concreteMaterial()), true);
+      if (c.dirt && !c.dirt.empty) {
+        const m = this.addStatic(new THREE.Mesh(c.dirt.toGeometry(), M.groundMaterial('dirt')), true);
+        m.castShadow = false;
+      }
+      if (c.rail && !c.rail.empty) this.addStatic(new THREE.Mesh(c.rail.toGeometry(), M.metalMaterial(0x9aa0a6)), true);
+      if (c.containers && !c.containers.empty) this.addStatic(new THREE.Mesh(c.containers.toGeometry(), M.containerMaterial()), true);
+      if (c.steel && !c.steel.empty) this.addStatic(new THREE.Mesh(c.steel.toGeometry(), M.metalMaterial(0xb06a2a)), true);
+      if (c.darkMetal && !c.darkMetal.empty) this.addStatic(new THREE.Mesh(c.darkMetal.toGeometry(), M.metalMaterial(0x30343a)), true);
+      if (c.yellow && !c.yellow.empty) this.addStatic(new THREE.Mesh(c.yellow.toGeometry(), M.metalMaterial(0xd8a020)), true);
+      if (c.grass && !c.grass.empty) {
+        const m = this.addStatic(new THREE.Mesh(c.grass.toGeometry(), M.groundMaterial('grass')), true);
+        m.castShadow = false;
+      }
+      if (c.lights && !c.lights.empty) {
+        const m = this.addStatic(new THREE.Mesh(c.lights.toGeometry(), M.emissiveMaterial(0xdfeeff, 3.2)), false, { shadows: false });
+        m.userData.decal = true;
+      }
+      if (c.paint && !c.paint.empty) {
+        const m = this.addStatic(new THREE.Mesh(c.paint.toGeometry(), M.paintedMaterial()), true);
+        m.castShadow = true;
+      }
+    }
+    if (!this.skyline.empty) {
+      const m = new THREE.Mesh(this.skyline.toGeometry(), M.buildingMaterial());
+      m.name = 'skyline';
+      m.userData.decal = true; // the detailed chunk meshes carry the colliders
+      m.matrixAutoUpdate = false;
+      m.receiveShadow = false;
+      this.root.add(m);
+      this.skylineMesh = m;
     }
     if (!this.markings.empty) {
       const mat = new THREE.MeshStandardMaterial({
@@ -385,7 +450,7 @@ export function addRamp(gen, x, z, rot, { width = 6, length = 14, height = 3.2, 
   gen.addStatic(mesh, true);
   const flat = new Float32Array(pts.flatMap((p) => [p.x, p.y, p.z]));
   const R = gen.physics.R;
-  const body = gen.physics.world.createRigidBody(R.RigidBodyDesc.fixed());
+  const body = gen.physics.staticBody;
   const desc = R.ColliderDesc.convexHull(flat).setFriction(0.9).setCollisionGroups((G.RAMP << 16) | 0xffff);
   const col = gen.physics.world.createCollider(desc, body);
   gen.physics.meta.set(col.handle, { kind, surface: 'metal' });

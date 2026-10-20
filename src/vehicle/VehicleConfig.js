@@ -102,9 +102,9 @@ export const CIVILIAN = {
 export const MODES = {
   track: {
     id: 'track', label: 'TRACK',
-    grip: [1.0, 1.0], tc: true, frontShare: 0.42, steerMul: 1.0,
-    falloff: [1.62, 1.6], alphaPeakMul: [1, 1], countersteer: 0.0,
-    airRate: 2.6, airAccel: 6.5, hover: 1.0, thrusterLock: false, torqueVector: 0.18,
+    grip: [1.0, 1.08], tc: true, frontShare: 0.42, steerMul: 1.0,
+    falloff: [1.62, 1.64], alphaPeakMul: [1, 1.05], countersteer: 0.0,
+    airRate: 2.6, airAccel: 6.5, hover: 1.0, thrusterLock: false, torqueVector: 0.1,
   },
   drift: {
     id: 'drift', label: 'DRIFT',

@@ -1,7 +1,7 @@
 // Game orchestrator: owns all systems, runs the fixed-step physics loop with render
 // interpolation, time scaling (slow motion / hit stop) and the top-level state machine.
 import * as THREE from 'three';
-import { Settings } from './Settings.js';
+import { Settings, QUALITY_ORDER } from './Settings.js';
 import { Input } from './Input.js';
 import { Renderer } from './Renderer.js';
 import { Physics, G, groups } from './Physics.js';
@@ -62,7 +62,9 @@ export class Game {
     this.physics = await Physics.create();
     this.setLoading(30, 'Generating Halcyon Bay');
     await nextFrame();
-    this.world = new World({ scene: this.scene, physics: this.physics, renderer: this.gfx, settings: this.settings }).build();
+    const t0 = performance.now();
+    this.world = new World({ scene: this.scene, physics: this.physics, renderer: this.gfx, settings: this.settings }).build((msg) => this.setLoading(50, `Generating ${msg}`));
+    console.info(`World generated in ${(performance.now() - t0).toFixed(0)} ms`);
     this.setLoading(80, 'Preparing vehicle');
     await nextFrame();
 
@@ -82,7 +84,10 @@ export class Game {
     const missing = this.world.selfCheck();
     if (missing) console.warn(`Collider self-check: ${missing} static meshes without colliders`);
 
-    if (this.params.get('test')) installTestHooks(this);
+    if (this.params.get('test')) {
+      installTestHooks(this);
+      this.THREE = THREE;
+    }
     this.setLoading(100, 'Ready');
     document.getElementById('loading').classList.add('done');
     this.state = 'playing';
@@ -124,8 +129,8 @@ export class Game {
       this.updateGameplay(dt, realDt);
     }
     this.playerVisual.update(dt, this.player);
-    this.world.update(dt, this.playerVisual.root.position);
     this.cameraCtl.update(dt, realDt, this.player, this.playerVisual.root, { pursuit: false });
+    this.world.update(dt, this.playerVisual.root.position, this.camera, this.player.velocity);
     this.hud.update(realDt, this.player);
     this.updateFx(realDt);
     this.physics.updateDebug();
@@ -192,8 +197,10 @@ export class Game {
   }
 
   prePhysics(h) {
+    this.world.step(h);
     this.player.energy.update(h, this.player);
     this.player.physicsStep(h);
+    this.world.props.checkVehicle(this.player, h);
   }
 
   postPhysics(h) {
@@ -278,11 +285,33 @@ export class Game {
     fx.damage = hpFrac < 0.3 ? (0.25 + 0.25 * Math.sin(this.time * 6)) * (1 - hpFrac / 0.3) : 0;
   }
 
+  // Automatic quality drop if FPS stays under 45 for 5 seconds.
+  autoQuality(dt) {
+    if (!this.settings.get('autoQuality') || this.params.get('test') || this.state !== 'playing') return;
+    this.lowFpsTime = this.fps < 45 ? (this.lowFpsTime || 0) + dt : 0;
+    if (this.lowFpsTime > 5) {
+      this.lowFpsTime = 0;
+      const order = QUALITY_ORDER;
+      const i = order.indexOf(this.settings.get('quality'));
+      if (i > 0) {
+        this.settings.set('quality', order[i - 1]);
+        this.applyQuality();
+        this.events.emit('notice', { text: `Quality lowered to ${this.settings.preset.label}` });
+      }
+    }
+  }
+
+  applyQuality() {
+    this.gfx.applyQuality();
+    this.world.applyQuality();
+  }
+
   updateDebugOverlay(realDt) {
     this.fpsAccum += realDt;
     this.fpsFrames++;
     if (this.fpsAccum >= 0.5) {
       this.fps = this.fpsFrames / this.fpsAccum;
+      this.autoQuality(this.fpsAccum);
       this.fpsAccum = 0;
       this.fpsFrames = 0;
       if (this.showDebug) {

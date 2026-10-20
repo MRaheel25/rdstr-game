@@ -120,7 +120,7 @@ export class Renderer {
     r.info.autoReset = false;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 2400);
+    this.camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.15, 4000);
 
     this.composer = new EffectComposer(r, { frameBufferType: THREE.HalfFloatType, multisampling: 0 });
     this.renderPass = new RenderPass(this.scene, this.camera);
@@ -157,8 +157,6 @@ export class Renderer {
     this.renderer.shadowMap.enabled = p.shadows;
     this.smaaPass.enabled = p.smaa;
     this.bloom.resolution.scale = p.bloomResolution;
-    this.camera.far = p.drawDistance + 600;
-    this.camera.updateProjectionMatrix();
     this.resize();
   }
 

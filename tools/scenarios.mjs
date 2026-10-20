@@ -42,8 +42,12 @@ export default {
       t.simulate(0.3, { throttle: 0.25 });
       const x0 = __game.player.position.x;
       const v0 = __game.player.speed;
-      const r = t.simulate(4, { throttle: 0, brake: 1 });
-      return { dist: Math.abs(r.final.x - x0), v0, speed: r.final.speed };
+      let stopX = null;
+      t.simulate(4, (c) => {
+        c.brake = 1;
+        if (stopX === null && __game.player.fwdSpeed < 0.2) stopX = __game.player.position.x;
+      });
+      return { dist: Math.abs((stopX ?? __game.player.position.x) - x0), v0, speed: 0 };
     });
     log('60-0 braking distance (m):', brake.dist.toFixed(1), 'from', brake.v0.toFixed(1), 'end speed', brake.speed.toFixed(2));
     for (const mode of ['track', 'drift']) {
@@ -129,5 +133,39 @@ export default {
     await page.keyboard.up('KeyR');
     await sleep(500);
     await shot('keys');
+  },
+
+  async tour({ page, sleep, shot, log }) {
+    const spots = [
+      ['downtown', [3.8, 0.7, 70, 0]],
+      ['ring', [0, 12.8, 594, Math.PI / 2]],
+      ['harbor', [0, 0.7, 700, Math.PI]],
+      ['containers', [-520, 0.7, 930, -Math.PI / 2]],
+      ['construction', [790, 1.6, 236, -Math.PI / 2]],
+      ['canyon', [-160, 14, -868, Math.PI / 2]],
+      ['lookout', [-412, 105, -1280, Math.PI * 0.9]],
+      ['waterfront', [-646, 0.7, 0, 0]],
+      ['tunnel', [280, 12.8, -594, -Math.PI / 2]],
+      ['garage', [120, 0.7, -140, 0]],
+    ];
+    await page.evaluate(() => __game.test.hold(true));
+    for (const [name, [x, y, z, yaw]] of spots) {
+      await page.evaluate(([x, y, z, yaw]) => { __game.test.teleport(x, y, z, yaw, 0); __game.test.simulate(0.5, {}); }, [x, y, z, yaw]);
+      await sleep(1500);
+      await shot(name);
+    }
+    // Aerial overview.
+    await page.evaluate(() => {
+      const THREE = __game.THREE;
+      __game.cameraCtl.playShot({ type: 'fixed', position: new THREE.Vector3(700, 380, 900), target: new THREE.Vector3(0, 0, 0), fov: 55, duration: 100 });
+    });
+    await sleep(2500);
+    await shot('aerial');
+    await page.evaluate(() => {
+      const THREE = __game.THREE;
+      __game.cameraCtl.playShot({ type: 'fixed', position: new THREE.Vector3(-200, 160, -1500), target: new THREE.Vector3(0, 40, 0), fov: 55, duration: 100 });
+    });
+    await sleep(2500);
+    await shot('aerial_north');
   },
 };

@@ -113,6 +113,27 @@ export class GeometryBatch {
     }
   }
 
+  // Box with an arbitrary orientation (quaternion), UVs in meters / uvScale.
+  orientedBox(center, quat, sx, sy, sz, uvScale = 0.25) {
+    const hx = sx / 2;
+    const hy = sy / 2;
+    const hz = sz / 2;
+    const P = (x, y, z) => new THREE.Vector3(x, y, z).applyQuaternion(quat).add(center);
+    const c = [
+      P(-hx, -hy, -hz), P(hx, -hy, -hz), P(hx, -hy, hz), P(-hx, -hy, hz),
+      P(-hx, hy, -hz), P(hx, hy, -hz), P(hx, hy, hz), P(-hx, hy, hz),
+    ];
+    const faces = [
+      [3, 2, 6, 7, sx, sy], [2, 1, 5, 6, sz, sy], [1, 0, 4, 5, sx, sy], [0, 3, 7, 4, sz, sy],
+      [7, 6, 5, 4, sx, sz], [0, 1, 2, 3, sx, sz],
+    ];
+    for (const [a, b, cc, d, w, h] of faces) {
+      const u = w * uvScale;
+      const v = h * uvScale;
+      this.quad(c[a], c[b], c[cc], c[d], [[0, 0], [u, 0], [u, v], [0, v]]);
+    }
+  }
+
   // Horizontal quad at height y spanning a rotated rectangle, UV in world meters / tile.
   flatRect(cx, y, cz, sx, sz, rot = 0, tile = 1, uvFn = null) {
     const c = Math.cos(rot);

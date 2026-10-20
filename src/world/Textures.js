@@ -82,7 +82,7 @@ export function asphalt() {
         // Roughness: wet asphalt ~0.45, puddles ~0.06.
         const puddle = n3(x, y);
         let r = 0.42 + (grain - 0.5) * 0.25 + wear * 0.12;
-        if (puddle > 0.68) r = 0.05 + (1 - Math.min(1, (puddle - 0.68) * 8)) * 0.35;
+        if (puddle > 0.68) r = 0.14 + (1 - Math.min(1, (puddle - 0.68) * 8)) * 0.3;
         const rv = Math.max(0, Math.min(255, r * 255));
         ri.data[i] = rv;
         ri.data[i + 1] = rv;

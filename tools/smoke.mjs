@@ -25,7 +25,7 @@ page.on('console', (m) => {
 page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}\n${e.stack}`));
 page.on('request', (r) => { if (!r.url().startsWith(`http://localhost:${port}`)) external.push(r.url()); });
 
-const url = `http://localhost:${port}/index.html?test=1&scenario=${scenario}`;
+const url = `http://localhost:${port}/index.html?test=1&scenario=${scenario}${process.env.EXTRA || ''}`;
 await page.goto(url);
 await page.waitForFunction(() => window.__game && window.__game.ready, null, { timeout: 120000 });
 
