@@ -81,7 +81,7 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 #energy-readout { position: absolute; left: 0; right: 0; top: 218px; text-align: center; font-family: var(--mono); font-size: 11px; opacity: 0.85; }
 #energy-readout span { margin: 0 5px; }
 
-#warnings { position: absolute; right: 30px; bottom: 320px; text-align: right; }
+#warnings { position: absolute; left: 50%; bottom: 46px; transform: translateX(-50%); text-align: center; text-shadow: 0 2px 6px rgba(0,0,0,0.8); }
 .warn { font-size: 14px; font-weight: 800; letter-spacing: 3px; color: var(--red); animation: blink 0.6s infinite alternate; margin-top: 4px; }
 .warn.info { color: var(--amber); animation: none; }
 .warn.cool { color: var(--cyan); animation: none; }
@@ -117,3 +117,14 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 
 #ui-root { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
 #ui-root > * { pointer-events: auto; }
+
+/* ---------------- Banners ---------------- */
+.banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; pointer-events: none; }
+.banner .banner-title { font-size: 64px; font-weight: 900; font-style: italic; letter-spacing: 10px; color: #fff; text-shadow: 0 0 24px rgba(63,224,255,0.6), 0 4px 0 rgba(0,0,0,0.6); }
+.banner .banner-sub { font-size: 16px; letter-spacing: 6px; color: var(--cyan); margin-top: 6px; text-transform: uppercase; }
+.banner.busted .banner-title { color: #fff; text-shadow: -6px 0 18px rgba(255,40,60,0.9), 6px 0 18px rgba(40,90,255,0.9); animation: bustFlash 0.5s infinite alternate; }
+.banner.busted .banner-sub { color: #ff6070; }
+.banner.cool .banner-title { color: #bff4ff; }
+.banner.anim { animation: bannerIn 0.4s cubic-bezier(.2,1.4,.4,1) both; }
+@keyframes bannerIn { from { transform: scale(1.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes bustFlash { from { text-shadow: -6px 0 18px rgba(255,40,60,0.9), 6px 0 18px rgba(40,90,255,0.9); } to { text-shadow: -6px 0 18px rgba(40,90,255,0.9), 6px 0 18px rgba(255,40,60,0.9); } }

@@ -5,7 +5,7 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 ## How to run
 - Static site, no build step: serve the repo root (`node tools/serve.mjs 8123`) and open `http://localhost:8123/`.
 - GitHub Pages serves `index.html` from the root (`.nojekyll` present). Libraries are vendored in `vendor/` and loaded through the import map; the game makes zero external requests.
-- Headless QA: `node tools/smoke.mjs <scenario> screenshots/<prefix>` (scenarios in `tools/scenarios.mjs`: `boot`, `physics`, `wall`, `drive`, `keys`). `?test=1` exposes `window.__game.test` (deterministic physics stepping).
+- Headless QA: `node tools/smoke.mjs <scenario> screenshots/<prefix>` (scenarios in `tools/scenarios.mjs`: `boot`, `physics`, `wall`, `drive`, `keys`, `tour`, `car`, `fleet`, `fx`, `pursuit`, `evade`, `busted`). `?test=1` exposes `window.__game.test` (deterministic physics stepping).
 
 ## Architecture (src/)
 | Module | Responsibility |
@@ -28,14 +28,18 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 | `world/Environment.js` | Sky dome, height fog chunk patch, moon + hemisphere, PMREM env map, time-of-day presets |
 | `world/LightStreaks.js`, `Atmosphere.js`, `Decor.js`, `Train.js` | Wet-road reflections, rain/steam/water, neon & billboards, elevated train |
 | `camera/CameraController.js` | Chase near/far, bumper, cinematic, scripted shots, sphere-cast collision, shake |
-| `ui/HUD.js` | Speed arc gauge, power/battery/COPV arcs, mode, HP, warnings, prompts |
+| `ui/HUD.js` | Speed arc gauge, power/battery/COPV arcs, mode, HP, heat stars + evade meter, warnings, prompts |
+| `ui/Minimap.js`, `ui/Banner.js` | Rotating minimap (police, search cones, heli, drones, Air Stations, mission marker); big banners |
+| `ai/Driver.js` | AI driver: pure pursuit, braking-distance corner speeds, obstacle probe, stuck recovery |
+| `ai/Traffic.js` | Civilian traffic: kinematic lane following with signals, turns into physics bodies on contact range |
+| `ai/Heat.js`, `ai/PoliceAI.js`, `ai/Radio.js` | Heat 0-5, evade/cooldown loop, busted timer; police units, roadblocks, spikes, heli, drones; dispatch subtitles |
 
 ## Milestones
 - [x] **M1 — Setup, collision and vehicle physics on a test city block**
 - [x] M2 — Full city world, lighting, sky, atmosphere and post-processing
 - [x] M3 — Roadster and police models
 - [x] M4 — VFX, camera and game feel
-- [ ] M5 — Police AI and heat system
+- [x] M5 — Police AI and heat system
 - [ ] M6 — Audio
 - [ ] M7 — Missions, races, scoring and progression
 - [ ] M8 — Menus, garage, settings and polish
@@ -90,8 +94,25 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 - Photo Mode (P): pauses, free camera, depth of field focused on the car, 5 filters, UI hidden.
 - Control hints shown for the first minute (H toggles).
 
+## M5 results (headless `pursuit`, `evade`, `busted` scenarios)
+- Traffic: 10/18/26/32 civilian cars by quality (sedan, hatch, SUV, van), lane following on the road graph, stop at red
+  signals, turn at intersections, become full physics bodies near the player (can be shunted), near-miss and honk events.
+- Heat 0-5 from offences seen by police (speeding near units, destruction, hitting cars/police) with level unlocks per spec:
+  1 cruisers follow/pull-over, 2 interceptors + ramming + PIT, 3 roadblocks + spike strips + helicopter, 4 SWAT + box-in +
+  rolling blocks on the Ring, 5 EMP drones + heavy roadblocks. Max 8 chasing / 12 total units.
+- Police drive with the shared AI driver; close pursuit uses ram cycles (contact, drop back, hit again), PIT from the rear
+  quarter, box roles at heat 4+; out of sight they intercept via A* on the road graph (routes start along the current road so
+  re-plans never double back) and later search around the last known position.
+- Line of sight via raycasts (Ghost Mode cuts police view range), helicopter searchlight, drones that fire EMP (thrusters
+  offline). Evade loop: lose visual -> EVADE meter fills outside search cones (faster under cover / in Ghost) -> COOLDOWN ->
+  heat cleared (+EVADED banner). Reinforcements during evade spawn around the last known position, out of view range.
+- Busted: stopped with 2 units within 7.5 m (or 1 unit while flooring it) for 3 s -> BUSTED; chassis HP 0 -> PURSUIT
+  TERMINATED; respawn on the nearest road with heat cleared. Wrecked units explode/burn, trigger takedown cam + radio.
+- Measured: heat 3 units reach the player within ~10-20 s of spawning; heat 5 drones EMP the player; evade from heat 2
+  completes in ~19 s parked out of sight; busted fires at 3.0 s with two cruisers alongside.
+
 ## Next
-- M5: police AI (pursuit, PIT, boxing, roadblocks, spike strips, helicopter, drones), heat & evade system, traffic.
+- M6: Web Audio (motor layers, tyres, wind, cold gas/rockets, sirens with Doppler, impacts, heli, adaptive music).
 
 ## Known issues
 - Ramp/merge geometry on the Highway Ring is functional but simple (taper merge, no exit lanes except via the same ramps).

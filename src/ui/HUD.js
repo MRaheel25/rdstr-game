@@ -24,6 +24,11 @@ export class HUD {
     this.gauge.width = 300 * dpr;
     this.gauge.height = 300 * dpr;
     this.g.scale(dpr, dpr);
+    this.starsEl = $('#heat .stars');
+    this.evadeEl = $('#heat .evade');
+    this.evadeFill = $('#heat .evade-fill');
+    this.evadeLabel = $('#heat .evade-label');
+    this.starKey = '';
     this.warnings = new Map();
     this.lastWarnKey = '';
     this.visible = false;
@@ -86,6 +91,26 @@ export class HUD {
       this.warnEl.innerHTML = [...this.warnings.values()].map((w) => `<div class="warn ${w.cls}">${w.text}</div>`).join('');
     }
     this.drawGauge(car, sp, units);
+  }
+
+  updateHeat(heat) {
+    const key = `${heat.level}_${heat.phase === 'pursuit' && heat.seen}`;
+    if (key !== this.starKey) {
+      this.starKey = key;
+      let html = '';
+      for (let i = 0; i < 5; i++) html += `<span class="${i < heat.level ? 'on' : ''}">★</span>`;
+      this.starsEl.innerHTML = html;
+      this.starsEl.classList.toggle('flash', heat.phase === 'pursuit' && heat.seen);
+    }
+    const ev = heat.phase === 'evade' || heat.phase === 'cooldown';
+    this.evadeEl.classList.toggle('show', ev);
+    this.evadeEl.classList.toggle('cool', heat.phase === 'cooldown');
+    if (ev) {
+      const v = heat.phase === 'cooldown' ? heat.cooldown : heat.evade;
+      this.evadeFill.style.width = `${(v * 100).toFixed(1)}%`;
+      this.evadeLabel.textContent = heat.phase === 'cooldown' ? 'COOLDOWN' : 'EVADE';
+    }
+    this.setWarning('busted', heat.busted > 0.4 ? `BUSTED ${'■'.repeat(Math.ceil(heat.busted * 3))}${'□'.repeat(Math.max(0, 9 - Math.ceil(heat.busted * 3)))}` : null);
   }
 
   drawGauge(car, sp, units) {

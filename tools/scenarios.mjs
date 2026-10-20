@@ -274,4 +274,67 @@ export default {
     await shot('photo');
     await page.keyboard.press('KeyP');
   },
+
+  async pursuit({ page, sleep, shot, log }) {
+    await page.evaluate(async () => {
+      __game.test.hold(true);
+      __game.test.teleport(3.8, 0.7, 300, 0, 20);
+      await __game.test.autopilot(28);
+      __game.test.simulate(2, 'pilot');
+      __game.heat.setLevel(3);
+    });
+    for (let k = 0; k < 10; k++) {
+      const r = await page.evaluate(() => { __game.test.simulate(3, 'pilot'); return __game.test.report(); });
+      log(`t=${(k + 1) * 3}s`, JSON.stringify(r));
+      if (k === 4 || k === 9) { await page.evaluate(() => { __game.cameraCtl.initialized = false; }); await sleep(800); await shot('pursuit_' + k); }
+    }
+    // Heat 5 stress.
+    await page.evaluate(() => __game.heat.setLevel(5));
+    for (let k = 0; k < 8; k++) {
+      const r = await page.evaluate(() => { __game.test.simulate(3, 'pilot'); return __game.test.report(); });
+      log(`H5 t=${(k + 1) * 3}s`, JSON.stringify(r));
+    }
+    await page.evaluate(() => { __game.cameraCtl.initialized = false; });
+    await sleep(800);
+    await shot('pursuit_h5');
+    log('player', JSON.stringify(await page.evaluate(() => __game.test.state())));
+  },
+
+  async evade({ page, sleep, shot, log }) {
+    // Start a 2-star pursuit, then teleport far away and park: heat should go
+    // pursuit -> evade -> cooldown -> none.
+    await page.evaluate(async () => {
+      __game.test.hold(true);
+      __game.test.teleport(3.8, 0.7, 300, 0, 0);
+      __game.heat.setLevel(2);
+      __game.test.simulate(6, {});
+      __game.test.teleport(-480, 0.7, -480, 0, 0);
+    });
+    for (let k = 0; k < 16; k++) {
+      const r = await page.evaluate(() => { __game.test.simulate(3, { handbrake: 1 }); return __game.test.report(); });
+      log(`t=${(k + 1) * 3}s`, JSON.stringify(r));
+      if (k === 2) await shot('evade_meter');
+      if (r.phase === 'none') break;
+    }
+    await sleep(600);
+    await shot('evade_done');
+  },
+
+  async busted({ page, sleep, shot, log }) {
+    await page.evaluate(async () => {
+      __game.test.hold(true);
+      __game.test.teleport(3.8, 0.7, 300, 0, 0);
+      __game.heat.setLevel(1);
+      const p = __game.player.position;
+      __game.police.spawnUnit('cruiser', { x: p.x - 5, y: 1, z: p.z }, 0, 'chase');
+      __game.police.spawnUnit('cruiser', { x: p.x + 5, y: 1, z: p.z }, 0, 'chase');
+    });
+    let r;
+    for (let k = 0; k < 8; k++) {
+      r = await page.evaluate(() => { __game.test.simulate(0.5, { handbrake: 1 }); return { ...__game.test.report(), state: __game.state }; });
+      log(`t=${((k + 1) * 0.5).toFixed(1)}s`, JSON.stringify(r));
+    }
+    await sleep(500);
+    await shot('busted');
+  },
 };

@@ -23,7 +23,10 @@ export function sedanDesign(o = {}) {
   const ws1 = o.windshieldTop ?? -0.25;
   const rw0 = o.rearWindowTop ?? 0.75;
   const rw1 = o.rearWindowBase ?? 1.35;
-  const Z = [-hl, -hl + 0.08, -hl + 0.25, fa - 0.45, fa, ws0 - 0.2, ws0, ws1, 0.2, rw0, rw1, ra, ra + 0.45, hl - 0.2, hl];
+  const Z = [-hl, -hl + 0.08, -hl + 0.25, fa - 0.45, fa, ws0 - 0.2, ws0, ws1, 0.2, rw0, rw1, ra, ra + 0.45, hl - 0.2, hl]
+    .filter((z) => z >= -hl && z <= hl)
+    .sort((a, b) => a - b)
+    .filter((z, i, arr) => i === 0 || z - arr[i - 1] > 0.03);
   const n = Z.length;
   const arr = (f) => Z.map((z, i) => f(z, i));
   const taper = (z) => {
@@ -520,7 +523,7 @@ export class HelicopterModel {
     this.searchPivot.quaternion.copy(parentQ.invert().multiply(q));
     this.spot.position.copy(this.searchPivot.position);
     this.spot.target.position.copy(this.root.worldToLocal(target.clone()));
-    this.spot.intensity = 7000 * intensity;
+    this.spot.intensity = 2200 * intensity;
     this.beam.visible = intensity > 0.01;
   }
 

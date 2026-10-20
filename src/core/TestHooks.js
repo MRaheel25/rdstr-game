@@ -12,6 +12,7 @@ export function installTestHooks(game) {
       p.world.step(p.eventQueue);
       game.postPhysics(STEP);
       for (const o of p.interp) o.saveCurr();
+      game.time += STEP;
       if (game.updateGameplay) game.updateGameplay(STEP, STEP);
     }
     for (const o of p.interp) o.apply(1);
@@ -46,7 +47,8 @@ export function installTestHooks(game) {
       const samples = [];
       const n = Math.round(seconds / STEP);
       this.clearControls();
-      const fn = typeof controls === 'function' ? controls : (c) => Object.assign(c, controls);
+      const base = typeof controls === 'function' ? controls : (c) => Object.assign(c, controls);
+      const fn = controls === 'pilot' ? (c) => this.pilot(c) : base;
       let k = 0;
       step(n, (c, t) => {
         fn(c, t);
@@ -71,6 +73,31 @@ export function installTestHooks(game) {
       game.scene.add(drone.root);
       game.showcase = { heli, drone };
       step(60);
+    },
+    // Player autopilot along random road-graph routes (for AI tests).
+    async autopilot(speed = 30) {
+      const { Driver } = await import('../ai/Driver.js');
+      const d = new Driver(game.player);
+      d.targetSpeed = speed;
+      this.pilot = (c) => {
+        if (!d.path.length || d.pathDone) d.setPath(game.police.randomRoute(game.player.position, 8), speed);
+        d.drive(1 / 120, Infinity);
+      };
+      return true;
+    },
+    report() {
+      const P = game.police;
+      const live = P.units.filter((u) => !u.v.wrecked);
+      const near = live.map((u) => u.v.position.distanceTo(game.player.position)).sort((a, b) => a - b);
+      return {
+        heat: game.heat.level, phase: game.heat.phase, evade: +game.heat.evade.toFixed(2), cooldown: +game.heat.cooldown.toFixed(2), busted: +game.heat.busted.toFixed(2),
+        units: live.length, wrecks: P.units.length - live.length, chase: P.chaseUnits.length, los: live.filter((u) => u.los).length,
+        roles: live.map((u) => u.role + (u.boxRole ? ':' + u.boxRole : '')).join(','),
+        nearest: near.slice(0, 3).map((x) => x.toFixed(0)).join('/'), roadblocks: P.roadblocks.length, spikes: P.spikes.length,
+        heli: !!P.heli, heliSees: P.heli ? P.heli.sees : false, drones: P.drones.length, traffic: game.traffic.cars.length,
+        hp: +game.player.hp.toFixed(0), speed: +game.player.speed.toFixed(1), emp: +game.player.energy.emp.toFixed(1),
+        popped: game.player.wheels.filter((w) => w.popped).length,
+      };
     },
     clearControls() {
       Object.assign(game.player.controls, { throttle: 0, brake: 0, steer: 0, handbrake: 0, rocket: false, hover: false, pitch: 0, yaw: 0, roll: 0 });

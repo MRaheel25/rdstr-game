@@ -1,18 +1,19 @@
 export default {
-  async boot({ page, sleep, shot }) {
-    await page.evaluate(() => { __game.test.hold(true); __game.test.teleport(0, 0.7, 700, Math.PI, 0); __game.test.simulate(0.3, {}); });
-    await sleep(800);
-    const names = ['smoke', 'dust', 'water', 'frost', 'fire', 'sparks', 'shards'];
-    for (const n of names) {
-      await page.evaluate((n) => {
-        const v = __game.vfx;
-        for (const k of ['smoke', 'dust', 'water', 'frost', 'fire', 'sparks', 'shards']) v[k].clear();
-        const p = __game.player.position;
-        for (let i = 0; i < 12; i++) v[n].spawn({ x: p.x + (i % 4 - 1.5) * 1.2, y: p.y + 1.5 + Math.floor(i / 4), z: p.z - 3, vx: 3, vy: 0, vz: 0, life: 50, size: 0.9, color: [1, 1, 1], alpha: 1 });
-        __game.vfx.update(0.016, 0.016);
-      }, n);
-      await sleep(900);
-      await page.screenshot({ path: `screenshots/dbg_p_${n}.png`, clip: { x: 340, y: 160, width: 600, height: 400 } });
+  async boot({ page, sleep, shot, log }) {
+    await page.evaluate(async () => {
+      __game.test.hold(true);
+      __game.test.teleport(3.8, 0.7, 300, 0, 0);
+      __game.heat.setLevel(1);
+      const p = __game.player.position;
+      __game.police.spawnUnit('cruiser', { x: p.x - 5, y: 1, z: p.z }, 0, 'chase');
+      __game.police.spawnUnit('cruiser', { x: p.x + 5, y: 1, z: p.z }, 0, 'chase');
+      __game.test.simulate(3.2, { handbrake: 1 });
+    });
+    for (let i = 0; i < 8; i++) {
+      const r = await page.evaluate(() => { const c = __game.camera.position; const p = __game.player.position; return { cam: [c.x, c.y, c.z].map((v) => +v.toFixed(1)), p: [p.x, p.y, p.z].map((v) => +v.toFixed(1)), ts: __game.timeScale, slow: __game.slowmo, wrecked: __game.player.wrecked, banner: document.querySelector('.banner').className, heat: __game.heat.phase }; });
+      log(i, JSON.stringify(r));
+      if (i === 1 || i === 6) await shot('dbg_b' + i);
+      await sleep(1000);
     }
   },
 };

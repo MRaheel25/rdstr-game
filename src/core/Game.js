@@ -21,6 +21,12 @@ import { VehicleFX } from '../fx/VehicleFX.js';
 import { Stunts } from '../game/Stunts.js';
 import { PhotoMode } from '../camera/PhotoMode.js';
 import { WATER_Y } from '../world/Layout.js';
+import { Traffic } from '../ai/Traffic.js';
+import { Heat } from '../ai/Heat.js';
+import { Radio } from '../ai/Radio.js';
+import { PoliceSystem } from '../ai/PoliceAI.js';
+import { Minimap } from '../ui/Minimap.js';
+import { Banner } from '../ui/Banner.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -103,6 +109,19 @@ export class Game {
     this.showHints = true;
     this.events.on('propBreak', (e) => this.onPropBreak(e));
     this.world.extraStreaks = (s) => this.addCarStreaks(s);
+    // AI: traffic, heat, police, radio, minimap.
+    this.traffic = new Traffic(this);
+    this.heat = new Heat(this);
+    this.radio = new Radio(this);
+    this.police = new PoliceSystem(this, this.heat, this.radio);
+    this.minimap = new Minimap(this.world);
+    this.banner = new Banner();
+    this.systems = [this.traffic, this.police];
+    this.extraCarStreaks = (s) => {
+      this.traffic.addStreaks(s, this.camera.position);
+      this.police.addStreaks(s);
+    };
+    this.setupPursuitEvents();
 
     const missing = this.world.selfCheck();
     if (missing) console.warn(`Collider self-check: ${missing} static meshes without colliders`);
@@ -163,6 +182,10 @@ export class Game {
     this.updateSmokeLighting(realDt);
     this.vfx.update(dt, realDt);
     this.hud.update(realDt, this.player);
+    this.hud.updateHeat(this.heat);
+    this.radio.update(realDt);
+    if (this.frame % 2 === 0) this.minimap.update(this.player, this.police, this.heat, this.world.gen.airStations);
+    this.banner.update(realDt);
     this.updateHints(realDt);
     this.updateFx(realDt);
     this.physics.updateDebug();
@@ -239,6 +262,7 @@ export class Game {
 
   prePhysics(h) {
     this.world.step(h);
+    this.traffic.step(h);
     this.player.energy.update(h, this.player);
     this.player.physicsStep(h);
     this.world.props.checkVehicle(this.player, h);
@@ -367,8 +391,100 @@ export class Game {
   updateGameplay(dt, realDt) {
     this.stunts.update(dt, realDt, this.player, this.input);
     this.updateWater(realDt);
+    this.updateAirStations();
+    this.pursuitActive = this.heat.phase !== 'none';
+    if (this.player.hp <= 0 && !this.player.wrecked) this.onPlayerWrecked();
     this.takedownCam.cooldown = Math.max(0, this.takedownCam.cooldown - realDt);
     if (this.systems) for (const s of this.systems) s.update(dt, realDt);
+  }
+
+  // Pursuit radio chatter and consequences.
+  setupPursuitEvents() {
+    const ev = this.events;
+    const radio = this.radio;
+    ev.on('pursuitStart', () => {
+      const d = this.police.describePlayer();
+      radio.say(`All units, white Roadster speeding ${d.dir} on ${d.street}. Pursuit authorized.`, { priority: true });
+    });
+    ev.on('heatUp', (e) => {
+      const lines = {
+        2: 'Interceptors are cleared to engage. Ram him off the road.',
+        3: 'Air One and spike strips authorized. Set up roadblocks ahead of the suspect.',
+        4: 'SWAT is responding. Box him in, rolling blocks on the Ring.',
+        5: 'All units, use any means necessary. EMP drones are in the air.',
+      };
+      if (lines[e.level]) radio.say(lines[e.level], { priority: true });
+    });
+    ev.on('lostVisual', () => {
+      const d = this.police.describePlayer();
+      radio.say(`We've lost visual. Last seen heading ${d.dir} near ${d.street}.`, { key: 'lost', every: 12 });
+    });
+    ev.on('reacquired', () => radio.say('Visual re-acquired! Stay on him!', { key: 'reacq', every: 10 }));
+    ev.on('cooldown', () => radio.say('No sign of the suspect. Widen the search pattern.', { key: 'cool', every: 15 }));
+    ev.on('pursuitEnd', (e) => {
+      if (e.reason === 'evaded') {
+        radio.say('Suspect is gone. All units, return to patrol.', { priority: true });
+        this.banner.show('EVADED', 'Heat cleared', 'cool');
+      }
+    });
+    ev.on('busted', () => this.onBusted());
+    ev.on('nearMiss', () => {
+      this.player.energy.charge(1.5);
+    });
+    ev.on('pit', () => radio.say('Executing PIT!', { key: 'pit', every: 12 }));
+  }
+
+  // Air Stations refill the COPV instantly and fix popped tyres.
+  updateAirStations() {
+    const p = this.player.position;
+    for (const a of this.world.gen.airStations) {
+      if (Math.abs(a.x - p.x) < 3.5 && Math.abs(a.z - p.z) < 3.5 && Math.abs(a.y - p.y) < 3) {
+        const e = this.player.energy;
+        if (e.pressure < e.pressureMax - 1 || this.player.wheels.some((w) => w.popped)) {
+          e.refillPressure();
+          for (const w of this.player.wheels) w.popped = false;
+          this.vfx.ring(a, 0x40e8ff, 6, 0.6);
+          this.banner.show('AIR STATION', 'COPV refilled', 'cool', 1.4);
+          this.events.emit('airStation', {});
+        }
+      }
+    }
+  }
+
+  onBusted() {
+    if (this.state !== 'playing') return;
+    this.player.wrecked = true;
+    this.slowmo.scale = 0.35;
+    this.slowmo.timer = 2;
+    this.banner.show('BUSTED', 'Suspect in custody', 'busted', 4);
+    this.events.emit('gameOver', { reason: 'busted' });
+    setTimeout(() => this.respawnAfter('busted'), 4200);
+  }
+
+  onPlayerWrecked() {
+    const p = this.player;
+    p.wrecked = true;
+    this.vfx.explosion(p.position, 1.3);
+    this.slowmo.scale = 0.3;
+    this.slowmo.timer = 1.8;
+    this.cameraCtl.addShake(1);
+    this.banner.show('PURSUIT TERMINATED', 'Chassis destroyed', 'busted', 4);
+    this.events.emit('gameOver', { reason: 'wrecked' });
+    setTimeout(() => this.respawnAfter('wrecked'), 4200);
+  }
+
+  respawnAfter(reason) {
+    if (this.onGameOver && this.onGameOver(reason)) return;
+    this.police.clearAll();
+    this.heat.clear(reason);
+    const p = this.player;
+    p.hp = p.maxHp;
+    p.wrecked = false;
+    for (const w of p.wheels) w.popped = false;
+    p.energy.refillPressure();
+    p.energy.battery = Math.max(p.energy.battery, 60);
+    this.playerVisual.repair();
+    this.resetPlayer();
   }
 
   isWet() {
