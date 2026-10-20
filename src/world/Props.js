@@ -42,7 +42,7 @@ export class Props {
 
   add(typeName, x, y, z, rot = 0, opts = {}) {
     const type = this.types[typeName];
-    const item = { type, x, y, z, rot, index: -1, collider: null, broken: false, brokenAt: 0, color: opts.color ?? null, data: opts };
+    const item = { type, typeName, x, y, z, rot, index: -1, collider: null, broken: false, brokenAt: 0, color: opts.color ?? null, data: opts };
     if (!this.byType.has(typeName)) this.byType.set(typeName, []);
     item.index = this.byType.get(typeName).length;
     this.byType.get(typeName).push(item);

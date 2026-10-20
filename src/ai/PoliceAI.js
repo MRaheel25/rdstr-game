@@ -526,6 +526,8 @@ export class PoliceSystem {
     if (s > 8 && v.position.distanceTo(this.game.player.position) < 120) {
       this.game.vfx.sparksAt(info.point, _v.copy(info.normal).setY(0.4), Math.min(30, s * 1.5), 10);
     }
+    // The player's own hits are voiced by the player impact handler.
+    if (s > 5 && !(other && other.ref === this.game.player)) this.game.events.emit('npcImpact', { position: info.point, strength: s });
     if (u.role === 'roadblock' && s > 3) {
       u.parked = false;
       u.role = 'chase';
@@ -895,7 +897,7 @@ export class PoliceSystem {
     d.dead = true;
     d.vel.y = 4;
     this.game.vfx.sparksAt(d.pos, UP, 20, 8);
-    this.game.events.emit('droneDown', {});
+    this.game.events.emit('droneDown', { position: d.pos });
   }
 
   // ---- busted -----------------------------------------------------------------------

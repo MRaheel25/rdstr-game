@@ -337,4 +337,40 @@ export default {
     await sleep(500);
     await shot('busted');
   },
+
+  async audio({ page, sleep, log }) {
+    const lvl = () => page.evaluate(() => {
+      const a = __game.audio;
+      let m = 0;
+      for (let i = 0; i < 4; i++) m = Math.max(m, a.engine.level());
+      return { state: a.engine.ctx.state, rms: +m.toFixed(4), time: +a.engine.now.toFixed(2) };
+    });
+    await page.evaluate(() => __game.test.teleport(3.8, 0.7, 300, 0, 0));
+    await sleep(1500);
+    log('idle', JSON.stringify(await lvl()));
+    // Music only.
+    await page.evaluate(() => { __game.settings.set('sfxVolume', 0); });
+    await sleep(800);
+    log('music only', JSON.stringify(await lvl()));
+    await page.evaluate(() => { __game.settings.set('sfxVolume', 0.9); __game.settings.set('musicVolume', 0); });
+    await sleep(800);
+    log('sfx only idle', JSON.stringify(await lvl()));
+    await page.keyboard.down('KeyW');
+    await sleep(2500);
+    log('throttle', JSON.stringify(await lvl()), JSON.stringify(await page.evaluate(() => ({ speed: __game.player.speed.toFixed(1) }))));
+    await page.keyboard.down('ShiftLeft');
+    await sleep(800);
+    log('rockets', JSON.stringify(await lvl()));
+    await page.keyboard.up('ShiftLeft');
+    await page.keyboard.up('KeyW');
+    await page.evaluate(() => { __game.settings.set('masterVolume', 0); });
+    await sleep(800);
+    log('master 0', JSON.stringify(await lvl()));
+    await page.evaluate(() => { __game.settings.set('masterVolume', 0.8); __game.settings.set('musicVolume', 0.55); __game.heat.setLevel(5); });
+    await sleep(4000);
+    log('heat 5', JSON.stringify(await lvl()), JSON.stringify(await page.evaluate(() => ({ units: __game.police.units.length, voices: __game.audio.police.voices.filter((v) => v.unit).length, layers: Object.fromEntries(Object.entries(__game.audio.music.layers).map(([k, v]) => [k, v.level])) }))));
+    await page.evaluate(() => { __game.test.hold(true); __game.player.energy.ghost = true; __game.audio.update(0.016); });
+    await sleep(1500);
+    log('ghost', JSON.stringify(await lvl()), JSON.stringify(await page.evaluate(() => ({ cutoff: __game.audio.engine.worldFilter.frequency.value.toFixed(0), layers: Object.fromEntries(Object.entries(__game.audio.music.layers).map(([k, v]) => [k, v.level])) }))));
+  },
 };

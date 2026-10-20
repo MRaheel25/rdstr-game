@@ -1,19 +1,20 @@
 export default {
-  async boot({ page, sleep, shot, log }) {
-    await page.evaluate(async () => {
-      __game.test.hold(true);
-      __game.test.teleport(3.8, 0.7, 300, 0, 0);
-      __game.heat.setLevel(1);
-      const p = __game.player.position;
-      __game.police.spawnUnit('cruiser', { x: p.x - 5, y: 1, z: p.z }, 0, 'chase');
-      __game.police.spawnUnit('cruiser', { x: p.x + 5, y: 1, z: p.z }, 0, 'chase');
-      __game.test.simulate(3.2, { handbrake: 1 });
+  async boot({ page, log }) {
+    const r = await page.evaluate(() => {
+      const g = __game;
+      const edges = g.world.graph.edges.filter((e) => /canyon/i.test(e.name || '') || e.kind === 'canyon');
+      const out = { n: edges.length, names: [...new Set(g.world.graph.edges.map((e) => e.kind))] };
+      const e = edges[0] || g.world.graph.edges.find((x) => x.points[0].y > 30);
+      if (!e) return out;
+      const p = e.points[Math.floor(e.points.length / 2)];
+      const q = e.points[Math.floor(e.points.length / 2) + 1];
+      g.test.hold(true);
+      g.test.teleport(p.x, p.y + 1, p.z, Math.atan2(-(q.x - p.x), -(q.z - p.z)), 0);
+      g.test.simulate(1, {});
+      out.surfaces = g.player.wheels.map((w) => w.surface + (w.grounded ? '' : '(air)'));
+      out.pos = [p.x, p.y, p.z].map(Math.round);
+      return out;
     });
-    for (let i = 0; i < 8; i++) {
-      const r = await page.evaluate(() => { const c = __game.camera.position; const p = __game.player.position; return { cam: [c.x, c.y, c.z].map((v) => +v.toFixed(1)), p: [p.x, p.y, p.z].map((v) => +v.toFixed(1)), ts: __game.timeScale, slow: __game.slowmo, wrecked: __game.player.wrecked, banner: document.querySelector('.banner').className, heat: __game.heat.phase }; });
-      log(i, JSON.stringify(r));
-      if (i === 1 || i === 6) await shot('dbg_b' + i);
-      await sleep(1000);
-    }
+    log(JSON.stringify(r));
   },
 };

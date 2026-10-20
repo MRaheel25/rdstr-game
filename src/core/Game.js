@@ -27,6 +27,7 @@ import { Radio } from '../ai/Radio.js';
 import { PoliceSystem } from '../ai/PoliceAI.js';
 import { Minimap } from '../ui/Minimap.js';
 import { Banner } from '../ui/Banner.js';
+import { AudioSystem } from '../audio/AudioSystem.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -122,6 +123,7 @@ export class Game {
       this.police.addStreaks(s);
     };
     this.setupPursuitEvents();
+    this.audio = new AudioSystem(this);
 
     const missing = this.world.selfCheck();
     if (missing) console.warn(`Collider self-check: ${missing} static meshes without colliders`);
@@ -184,6 +186,7 @@ export class Game {
     this.hud.update(realDt, this.player);
     this.hud.updateHeat(this.heat);
     this.radio.update(realDt);
+    this.audio.update(realDt);
     if (this.frame % 2 === 0) this.minimap.update(this.player, this.police, this.heat, this.world.gen.airStations);
     this.banner.update(realDt);
     this.updateHints(realDt);
@@ -385,7 +388,7 @@ export class Game {
     }
     if (vy < -12) this.vfx.sparksAt(gp, new THREE.Vector3(0, 1, 0), 20, 8);
     this.stunts.onLand(v, airTime, vy);
-    this.events.emit('land', { vehicle: v, airTime });
+    this.events.emit('land', { vehicle: v, airTime, vy });
   }
 
   updateGameplay(dt, realDt) {

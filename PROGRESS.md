@@ -5,7 +5,7 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 ## How to run
 - Static site, no build step: serve the repo root (`node tools/serve.mjs 8123`) and open `http://localhost:8123/`.
 - GitHub Pages serves `index.html` from the root (`.nojekyll` present). Libraries are vendored in `vendor/` and loaded through the import map; the game makes zero external requests.
-- Headless QA: `node tools/smoke.mjs <scenario> screenshots/<prefix>` (scenarios in `tools/scenarios.mjs`: `boot`, `physics`, `wall`, `drive`, `keys`, `tour`, `car`, `fleet`, `fx`, `pursuit`, `evade`, `busted`). `?test=1` exposes `window.__game.test` (deterministic physics stepping).
+- Headless QA: `node tools/smoke.mjs <scenario> screenshots/<prefix>` (scenarios in `tools/scenarios.mjs`: `boot`, `physics`, `wall`, `drive`, `keys`, `tour`, `car`, `fleet`, `fx`, `pursuit`, `evade`, `busted`, `audio`). `?test=1` exposes `window.__game.test` (deterministic physics stepping).
 
 ## Architecture (src/)
 | Module | Responsibility |
@@ -32,6 +32,7 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 | `ui/Minimap.js`, `ui/Banner.js` | Rotating minimap (police, search cones, heli, drones, Air Stations, mission marker); big banners |
 | `ai/Driver.js` | AI driver: pure pursuit, braking-distance corner speeds, obstacle probe, stuck recovery |
 | `ai/Traffic.js` | Civilian traffic: kinematic lane following with signals, turns into physics bodies on contact range |
+| `audio/*` | Web Audio: engine/buses/listener (`AudioEngine`), car (`CarAudio`), sirens/heli/drones (`PoliceAudio`), one-shots (`SFX`), adaptive music (`Music`), glue (`AudioSystem`) |
 | `ai/Heat.js`, `ai/PoliceAI.js`, `ai/Radio.js` | Heat 0-5, evade/cooldown loop, busted timer; police units, roadblocks, spikes, heli, drones; dispatch subtitles |
 
 ## Milestones
@@ -40,7 +41,7 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 - [x] M3 — Roadster and police models
 - [x] M4 — VFX, camera and game feel
 - [x] M5 — Police AI and heat system
-- [ ] M6 — Audio
+- [x] M6 — Audio
 - [ ] M7 — Missions, races, scoring and progression
 - [ ] M8 — Menus, garage, settings and polish
 
@@ -111,8 +112,25 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 - Measured: heat 3 units reach the player within ~10-20 s of spawning; heat 5 drones EMP the player; evade from heat 2
   completes in ~19 s parked out of sight; busted fires at 3.0 s with two cruisers alongside.
 
+## M6 results
+- Everything synthesized with the Web Audio API (no files). Buses: world SFX -> low-pass "muffle" -> SFX, music, UI ->
+  compressor -> output; generated convolution reverb; analyser for the headless level test.
+- Car: EV motor whine tracking wheel speed (saw + triangle through a moving band-pass), sub layer under load, inverter
+  harmonics at low speed, regen whine, turbine whistle above ~125 mph; tyre squeal from slide on hard surfaces; road roar;
+  gravel crackle on dirt/grass (terrain colliders now report `grass`); puddle spray when wet; wind (speed squared);
+  metal scrape loop; cold-gas hiss bursts for Hover Jets / air control; Rear Rocket roar with sub rumble. Slow motion lowers pitch.
+- Police: 4 siren voices assigned to the nearest units (wail far, yelp close / interceptors, hi-lo SWAT), Doppler from
+  relative velocity, PannerNode falloff, engine growl; helicopter rotor thump + blade slap + turbine; drone buzz.
+- One-shots: impacts (crunch + clank, scaled by strength), glass, explosions, landings, splashes, spike pops, EMP, near-miss
+  whoosh (panned), traffic horns, prop hits by material, Cold Snap shimmer, frost shockwave, launch, Air Station, radio squelch,
+  heat alert, stingers (evaded, busted, takedown).
+- Adaptive synthwave (96 BPM, A minor): pad + soft arp in free roam, bass at heat 1, drums at 2, hats at 3, lead at 4,
+  double-time at 5. Ghost Mode / Cold Snap: pad only and the world muffled through a low-pass. Pause ducks the world.
+- Master / Music / SFX volumes come from Settings (squared curves) and update live. Measured headless: master 0 -> silence,
+  motor under throttle ~-19 dBFS RMS, Ghost Mode -> world cutoff ramps down to ~400 Hz, music layers follow heat.
+
 ## Next
-- M6: Web Audio (motor layers, tyres, wind, cold gas/rockets, sirens with Doppler, impacts, heli, adaptive music).
+- M7: missions, races, scoring/style system, cash/rep progression, garage upgrades, save game.
 
 ## Known issues
 - Ramp/merge geometry on the Highway Ring is functional but simple (taper merge, no exit lanes except via the same ramps).

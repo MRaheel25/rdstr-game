@@ -82,7 +82,7 @@ export class Physics {
       .setFriction(opts.friction ?? 0.9)
       .setCollisionGroups(groups(opts.group ?? G.STATIC));
     const col = this.world.createCollider(desc, body);
-    this.meta.set(col.handle, { kind: opts.kind || 'terrain', ref: null });
+    this.meta.set(col.handle, { kind: opts.kind || 'terrain', ref: null, surface: opts.surface });
     return col;
   }
 

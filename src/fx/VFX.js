@@ -74,6 +74,7 @@ class Jet {
 export class VFX {
   constructor(game) {
     this.game = game;
+    this.onExplosion = null; // (position, power) hook used by the audio system
     this.scene = game.scene;
     this.physics = game.physics;
     const q = () => game.settings.preset.particles;
@@ -265,6 +266,7 @@ export class VFX {
   }
 
   explosion(p, power = 1) {
+    if (this.onExplosion) this.onExplosion(p, power);
     const q = this.quality();
     for (let i = 0; i < 40 * q * power; i++) {
       const a = Math.random() * Math.PI * 2;

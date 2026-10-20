@@ -184,7 +184,7 @@ export class Terrain {
     mesh.castShadow = false;
     // Collider.
     const center = { x: x0 + (nx * cell) / 2, y: 0, z: z0 + (nz * cell) / 2 };
-    this.gen.physics.fixedHeightfield(nz, nx, this.heights, { x: nx * cell, y: 1, z: nz * cell }, center, { kind: 'terrain' });
+    this.gen.physics.fixedHeightfield(nz, nx, this.heights, { x: nx * cell, y: 1, z: nz * cell }, center, { kind: 'terrain', surface: 'grass' });
     return mesh;
   }
 }
