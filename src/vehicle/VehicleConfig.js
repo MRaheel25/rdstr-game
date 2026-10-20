@@ -66,6 +66,17 @@ export const POLICE_INTERCEPTOR = {
   hp: 90,
 };
 
+// Street-race rivals: tuned coupes, a little below the Roadster's pace (rubber-banded by the AI).
+export const RIVAL = {
+  ...POLICE_INTERCEPTOR,
+  id: 'rival',
+  mass: 1650,
+  tire: { mu: 1.5, alphaPeak: 0.14, rollRes: 0.012 },
+  drive: { maxForce: 26000, power: 820000, reverseSpeed: 15, brakeForce: 32000, brakeFront: 0.6, regenForce: 1500 },
+  aero: { dragK: 0.5, downforceK: 1.5, downforceFront: 0.45 },
+  hp: 150,
+};
+
 export const SWAT_TRUCK = {
   id: 'swat',
   mass: 6200,

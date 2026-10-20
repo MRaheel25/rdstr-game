@@ -18,6 +18,11 @@ export class Banner {
     this.el.classList.add('anim');
   }
 
+  hide() {
+    this.timer = 0;
+    this.el.classList.add('hidden');
+  }
+
   update(realDt) {
     if (this.timer <= 0) return;
     this.timer -= realDt;

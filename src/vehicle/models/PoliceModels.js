@@ -120,13 +120,13 @@ export class LightBar {
   }
 }
 
-function decal(text, w, h, opts) {
+export function decal(text, w, h, opts) {
   const tex = textTexture(text, { w: 1024, h: Math.round((1024 * h) / w), color: opts.color || '#0a0a0a', font: opts.font || 'bold 110px Arial', bg: null });
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
   return m;
 }
 
-class LoftedCar extends CarVisual {
+export class LoftedCar extends CarVisual {
   constructor(cfg, design, mats, groundY) {
     super(cfg);
     this.design = design;
@@ -306,7 +306,7 @@ export class InterceptorModel extends LoftedCar {
 }
 
 let _radial = null;
-function radialTex() {
+export function radialTex() {
   if (_radial) return _radial;
   const c = document.createElement('canvas');
   c.width = 64;

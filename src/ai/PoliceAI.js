@@ -49,6 +49,7 @@ export class PoliceSystem {
     this.lights = [];
     this.cones = [];
     this.bustedFired = false;
+    this.typeOverride = null; // missions can force unit types
     const n = 4;
     for (let i = 0; i < n; i++) {
       const l = new THREE.PointLight(i % 2 ? 0x2040ff : 0xff2020, 0, 45, 1.6);
@@ -60,6 +61,11 @@ export class PoliceSystem {
       if (e.vehicle === game.player) this.heat.add(this.anySeesPlayer() ? 14 : 4, 'destruction');
     });
     game.events.on('frostShockwave', (e) => this.onFrost(e));
+    // Dispatch: the first units of a new pursuit come from closer.
+    game.events.on('pursuitStart', () => {
+      this.spawnTimer = 0;
+      this.quickSpawn = 3;
+    });
   }
 
   get chaseUnits() {
@@ -236,9 +242,13 @@ export class PoliceSystem {
         if (chasing < want && active.length < MAX_TOTAL) {
           const s = searching
             ? this.findSpawn(40, 220, { center: heat.lastKnown || player.position })
-            : this.findSpawn(130, 300, { ahead: Math.random() < 0.4 });
+            : this.quickSpawn > 0
+              ? this.findSpawn(80, 170, { ahead: Math.random() < 0.5 })
+              : this.findSpawn(130, 300, { ahead: Math.random() < 0.4 });
+          if (s && this.quickSpawn > 0) this.quickSpawn--;
           if (s) {
-            const type = cfg.types[Math.floor(Math.random() * cfg.types.length)];
+            const types = this.typeOverride || cfg.types;
+            const type = types[Math.floor(Math.random() * types.length)];
             const u = this.spawnUnit(type, s.pos, s.yaw, 'chase');
             u.v.body.setLinvel({ x: -Math.sin(s.yaw) * 15, y: 0, z: -Math.cos(s.yaw) * 15 }, true);
           }
@@ -529,6 +539,10 @@ export class PoliceSystem {
     // The player's own hits are voiced by the player impact handler.
     if (s > 5 && !(other && other.ref === this.game.player)) this.game.events.emit('npcImpact', { position: info.point, strength: s });
     if (u.role === 'roadblock' && s > 3) {
+      if (other && other.ref === this.game.player && u.block && !u.block.smashed) {
+        u.block.smashed = true;
+        this.game.events.emit('roadblockSmash', { position: v.position.clone() });
+      }
       u.parked = false;
       u.role = 'chase';
     }

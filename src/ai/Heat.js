@@ -46,10 +46,18 @@ export class Heat {
     }
   }
 
+  // Direct heat (missions, scanners): the player's position has been reported, so the police
+  // know where to go for a few seconds before the escape loop can start.
   setLevel(level) {
+    const before = this.level;
     this.level = clamp(level, 0, this.maxLevel);
     this.points = Math.max(this.points, HEAT_LEVELS[this.level].threshold);
     if (this.level > 0 && this.phase === 'none') this.startPursuit();
+    if (this.level > before) {
+      this.lastSeen = Math.max(this.lastSeen, this.game.time + 6);
+      this.lastKnown = this.game.player.position.clone();
+      this.game.events.emit('heatUp', { level: this.level, reason: 'reported' });
+    }
   }
 
   startPursuit() {

@@ -19,15 +19,16 @@ export class Radio {
   }
 
   // key: rate-limit category (seconds in `every`).
-  say(text, { key = null, every = 6, priority = false } = {}) {
+  say(text, { key = null, every = 6, priority = false, tag = 'DISPATCH' } = {}) {
     if (key) {
       const t = this.cooldowns.get(key) || -1e9;
       if (this.game.time - t < every) return;
       this.cooldowns.set(key, this.game.time);
     }
     if (text === this.lastText) return;
-    if (priority) this.queue.unshift(text);
-    else this.queue.push(text);
+    const item = { text, tag };
+    if (priority) this.queue.unshift(item);
+    else this.queue.push(item);
     if (this.queue.length > 4) this.queue.length = 4;
   }
 
@@ -38,9 +39,9 @@ export class Radio {
       return;
     }
     if (this.queue.length) {
-      const text = this.queue.shift();
+      const { text, tag } = this.queue.shift();
       this.lastText = text;
-      this.el.innerHTML = `<span class="tag">DISPATCH</span>${text}`;
+      this.el.innerHTML = `<span class="tag ${tag === 'DISPATCH' ? '' : 'contact'}">${tag}</span>${text}`;
       this.el.classList.add('show');
       this.timer = 3.6 + text.length * 0.02;
       this.game.events.emit('radio', { text });

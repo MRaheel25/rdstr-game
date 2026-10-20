@@ -373,4 +373,107 @@ export default {
     await sleep(1500);
     log('ghost', JSON.stringify(await lvl()), JSON.stringify(await page.evaluate(() => ({ cutoff: __game.audio.engine.worldFilter.frequency.value.toFixed(0), layers: Object.fromEntries(Object.entries(__game.audio.music.layers).map(([k, v]) => [k, v.level])) }))));
   },
+
+  async missions({ page, sleep, shot, log }) {
+    const st = () => page.evaluate(() => {
+      const a = __game.activities.active;
+      return { state: __game.state, stage: a && a.stage ? a.stage.label : null, heat: __game.heat.level, phase: __game.heat.phase, obj: document.querySelector('#objective .obj-text').textContent, prompt: document.querySelector('#prompt').textContent, cash: __game.progress.cash, rep: __game.progress.rep };
+    });
+    const waitFor = async (fn, ms = 15000) => {
+      const t0 = Date.now();
+      while (Date.now() - t0 < ms) {
+        if (await page.evaluate(fn)) return true;
+        await sleep(250);
+      }
+      return false;
+    };
+    await page.evaluate(() => { __game.progress.reset(); __game.test.hold(true); __game.test.teleport(-116, 0.7, 304, Math.PI, 0); __game.test.simulate(0.5, {}); });
+    await waitFor(() => document.querySelector('#prompt').textContent.includes('CLEAN EXIT'));
+    log('at marker', JSON.stringify(await st()));
+    await shot('marker');
+    await page.keyboard.press('Enter');
+    log('briefing open', await waitFor(() => __game.state === 'briefing'));
+    await sleep(800);
+    await shot('briefing');
+    await page.keyboard.press('Enter');
+    log('started', await waitFor(() => !!__game.activities.active), JSON.stringify(await st()));
+    await page.evaluate(() => { __game.test.teleport(244, 0.7, -300, 0, 0); __game.test.simulate(3.2, { handbrake: 1 }); });
+    log('after pickup', JSON.stringify(await st()));
+    await page.evaluate(() => { __game.test.simulate(2, { handbrake: 1 }); __game.police.clearAll(); __game.heat.clear('evaded'); __game.test.simulate(0.5, {}); });
+    log('evaded', JSON.stringify(await st()));
+    await page.evaluate(() => { __game.test.teleport(-600, 0.7, 124, 0, 0); __game.test.simulate(1, { handbrake: 1 }); });
+    await waitFor(() => !!document.querySelector('.overlay.results'));
+    await sleep(1500);
+    log('done', JSON.stringify(await st()));
+    await shot('results');
+    await page.keyboard.press('Enter');
+    await waitFor(() => __game.state === 'playing');
+    log('after continue', JSON.stringify(await st()), JSON.stringify(await page.evaluate(() => __game.progress.data.missions)));
+    // Fail path: timed Data Run running out of time.
+    await page.evaluate(() => {
+      const def = __game.activities.defs.find((d) => d.id === 'cold-storage');
+      __game.activities.begin(def);
+      __game.test.simulate(92, { handbrake: 1 });
+    });
+    await waitFor(() => !!document.querySelector('.overlay.results'));
+    await sleep(1200);
+    log('timeout', JSON.stringify(await st()), await page.evaluate(() => document.querySelector('.res-sub').textContent));
+    await shot('results_fail');
+    await page.keyboard.press('Enter');
+  },
+
+  async race({ page, sleep, shot, log }) {
+    const id = process.env.RACE || 'downtown-circuit';
+    await page.evaluate(async (id) => {
+      __game.test.hold(true);
+      __game.progress.data.rep = 5000;
+      __game.progress.data.districts = ['downtown', 'highway', 'harbor', 'construction', 'canyon'];
+      const def = __game.activities.defs.find((d) => d.id === id);
+      __game.activities.begin(def);
+      if (!window.location.search.includes('police')) __game.heat.maxLevel = 0;
+      const { Driver } = await import('./src/ai/Driver.js');
+      const race = __game.activities.active.race;
+      const d = new Driver(__game.player);
+      const line = [];
+      for (let k = 0; k < def.laps + 1; k++) line.push(...race.center.map((p) => { const q = p.clone(); q.y += 0.4; return q; }));
+      d.setPath(line, def.speed);
+      window.__pilot = d;
+    }, id);
+    await sleep(800);
+    await shot('race_grid_' + id);
+    for (let k = 0; k < 70; k++) {
+      const r = await page.evaluate(() => {
+        __game.test.simulate(3, (c) => { if (!__game.inputLock) window.__pilot.drive(1 / 120, Infinity); });
+        const a = __game.activities.active;
+        if (!a) return { done: true, state: __game.state, title: document.querySelector('.res-title') && document.querySelector('.res-title').textContent };
+        const race = a.race;
+        return { t: +race.time.toFixed(1), state: race.state, pos: race.positionOf(race.player), cp: race.player.cp + '/' + race.totalCps, rivals: race.racers.slice(1).map((r) => r.cp + (r.finished ? 'F' : '')).join(','), speed: +__game.player.speed.toFixed(1), heat: __game.heat.level, drift: Math.round(race.player.drift) };
+      });
+      log(JSON.stringify(r));
+      if (k === 3) { await page.evaluate(() => { __game.cameraCtl.initialized = false; }); await sleep(600); await shot('race_mid_' + id); }
+      if (r.done) break;
+    }
+    await sleep(1200);
+    await shot('race_results_' + id);
+  },
+
+  async score({ page, log }) {
+    await page.evaluate(async () => {
+      __game.test.hold(true);
+      window.__ev = { nearMiss: 0, takedown: 0, stunt: 0, bank: 0, lost: 0 };
+      for (const k of ['nearMiss', 'takedown']) __game.events.on(k, () => window.__ev[k]++);
+      __game.events.on('stuntLanding', () => window.__ev.stunt++);
+      __game.test.teleport(3.8, 0.7, 300, 0, 20);
+      await __game.test.autopilot(34);
+      __game.heat.setLevel(3);
+    });
+    for (let k = 0; k < 10; k++) {
+      const r = await page.evaluate(() => {
+        __game.test.simulate(15, 'pilot');
+        const s = __game.score;
+        return { t: (s.game.time | 0), total: s.total, chain: Math.round(s.chain.points), mult: s.mult, best: s.bestCombo, ev: window.__ev, heat: __game.heat.level, hp: Math.round(__game.player.hp), units: __game.police.units.length };
+      });
+      log(JSON.stringify(r));
+    }
+  },
 };

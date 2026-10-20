@@ -16,7 +16,7 @@ export class Minimap {
     this.ctx = this.canvas.getContext('2d');
     this.ctx.scale(dpr, dpr);
     this.zoom = 0.9;
-    this.markers = [];
+    this.markers = []; // activity starts: {x, z, color, done, kind}
     this.mission = null;
     this.buildLayer();
   }
@@ -70,6 +70,10 @@ export class Minimap {
     this.mission = m; // {x, z, label} or null
   }
 
+  setMarkers(list) {
+    this.markers = list;
+  }
+
   update(player, police, heat, airStations) {
     const ctx = this.ctx;
     const S = this.size;
@@ -106,6 +110,30 @@ export class Minimap {
         ctx.closePath();
         ctx.fill();
       }
+    }
+    // Activity start markers: diamonds for missions, flags for races (dim when completed).
+    for (const m of this.markers) {
+      const s = 7 / z;
+      ctx.save();
+      ctx.translate(m.x, m.z);
+      ctx.rotate(-heading);
+      ctx.globalAlpha = m.done ? 0.55 : 1;
+      ctx.fillStyle = m.color;
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1.5 / z;
+      ctx.beginPath();
+      if (m.kind === 'race') {
+        ctx.rect(-s * 0.8, -s * 0.8, s * 1.6, s * 1.6);
+      } else {
+        ctx.moveTo(0, -s);
+        ctx.lineTo(s, 0);
+        ctx.lineTo(0, s);
+        ctx.lineTo(-s, 0);
+        ctx.closePath();
+      }
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
     }
     // Air stations.
     ctx.strokeStyle = '#40e8ff';

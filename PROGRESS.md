@@ -5,7 +5,7 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 ## How to run
 - Static site, no build step: serve the repo root (`node tools/serve.mjs 8123`) and open `http://localhost:8123/`.
 - GitHub Pages serves `index.html` from the root (`.nojekyll` present). Libraries are vendored in `vendor/` and loaded through the import map; the game makes zero external requests.
-- Headless QA: `node tools/smoke.mjs <scenario> screenshots/<prefix>` (scenarios in `tools/scenarios.mjs`: `boot`, `physics`, `wall`, `drive`, `keys`, `tour`, `car`, `fleet`, `fx`, `pursuit`, `evade`, `busted`, `audio`). `?test=1` exposes `window.__game.test` (deterministic physics stepping).
+- Headless QA: `node tools/smoke.mjs <scenario> screenshots/<prefix>` (scenarios in `tools/scenarios.mjs`: `boot`, `physics`, `wall`, `drive`, `keys`, `tour`, `car`, `fleet`, `fx`, `pursuit`, `evade`, `busted`, `audio`, `missions`, `race` (env `RACE=ring-sprint|downtown-circuit|canyon-drift`), `score`). `?test=1` exposes `window.__game.test` (deterministic physics stepping).
 
 ## Architecture (src/)
 | Module | Responsibility |
@@ -33,6 +33,11 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 | `ai/Driver.js` | AI driver: pure pursuit, braking-distance corner speeds, obstacle probe, stuck recovery |
 | `ai/Traffic.js` | Civilian traffic: kinematic lane following with signals, turns into physics bodies on contact range |
 | `audio/*` | Web Audio: engine/buses/listener (`AudioEngine`), car (`CarAudio`), sirens/heli/drones (`PoliceAudio`), one-shots (`SFX`), adaptive music (`Music`), glue (`AudioSystem`) |
+| `game/Progress.js` | Career save (localStorage `rdstr.save.v1`): cash, rep, districts, mission stars, race records, upgrades, paints, stats |
+| `game/Score.js` | Style score: base values, chain multiplier x1-x10, bank after 3 s, crash loses chain, 3D popups |
+| `game/Activities.js`, `Missions.js`, `Races.js` | Free-roam markers, briefing -> run -> results, 10 story missions, 3 street races with rivals |
+| `game/Markers.js`, `game/Jumps.js` | Light columns / checkpoint gates; named stunt-jump detection |
+| `ui/ActivityUI.js` | Briefing cards, results screen, race HUD, countdown, objective line |
 | `ai/Heat.js`, `ai/PoliceAI.js`, `ai/Radio.js` | Heat 0-5, evade/cooldown loop, busted timer; police units, roadblocks, spikes, heli, drones; dispatch subtitles |
 
 ## Milestones
@@ -42,7 +47,7 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 - [x] M4 — VFX, camera and game feel
 - [x] M5 — Police AI and heat system
 - [x] M6 — Audio
-- [ ] M7 — Missions, races, scoring and progression
+- [x] M7 — Missions, races, scoring and progression
 - [ ] M8 — Menus, garage, settings and polish
 
 ## M1 results (measured headless with `node tools/smoke.mjs physics` / `wall`)
@@ -129,8 +134,35 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 - Master / Music / SFX volumes come from Settings (squared curves) and update live. Measured headless: master 0 -> silence,
   motor under throttle ~-19 dBFS RMS, Ghost Mode -> world cutoff ramps down to ~400 Hz, music layers follow heat.
 
+## M7 results
+- Story: VOLT works for a contact called CIPHER (briefings and outros in the contact's voice, radio-style subtitles).
+- 10 missions, 2 of each type: Getaway (Clean Exit, Harbor Heist), Data Run (Cold Storage, Uplink), Bounty (Black & White,
+  Interceptor Hunt), Sky Gap (Leap of Faith, Steel Garden), Ghost Protocol (Silent Running, Blackout). Missions are stage
+  scripts (reach / hold / evade / checkpoints / takedowns / jumps / scanners) with mission rules: time limits, max heat,
+  locked minimum heat, forced police unit types, extra patrols. Briefing card, objective + timer HUD, star criteria.
+- 3 street races inside the world: Highway Ring Sprint (2 laps), Downtown Circuit (2 laps), Canyon Drift Run (point to point,
+  scored on drift). 3 rival AI drivers (own coupe models, racing lines, rubber band, overtaking around blocked lanes,
+  off-screen recovery), checkpoint gates, countdown, live standings, lap / best lap, saved best time / lap / drift score.
+  Police are reported mid-race. Busted / wrecked during an activity = fail.
+- Style score per spec (Drift 10/s, Near Miss 50, Perfect Landing 150, Flip / Barrel Roll 200, Cold Snap Landing 300,
+  Takedown 500, Roadblock Smash 250, Air 25/s; plus named stunt jumps 250). Chain multiplier grows by 1 every 2 moves within
+  3 s (max x10), banks after 3 s clean, a crash loses it. Popups punch in at the move's 3D position and fly into the counter.
+- Progression: cash and rep from missions (scaled by stars, full rep first time), races (by position), banked style
+  (score / 20 cash), free-roam escapes (by heat and time). Rep unlocks districts (Harbor 400, Construction 1000, Canyon 1800)
+  and with them their activities; briefings show rep requirements. Bust = impound fee, wreck = repair bill.
+- Results screen (frozen frame, glitch title): time, top speed, takedowns, best combo, style score, stars, cash/rep, records,
+  unlocks, CIPHER outro, Continue / Retry. Also shown after a free-roam bust or wreck with the pursuit summary.
+- Garage upgrade data (cooling, COPV, thrusters, armor, grip; 3 levels) and paint prices are in Progress.js and applied to the
+  car at start; the Garage UI to buy them comes in M8.
+- Fixes found while testing: AI driver no longer capped at 40 m/s on straights; police get a short "reported position"
+  window and closer dispatch when a mission sets heat directly; car-carrier ramp geometry (lower deck poked through the ramp).
+- Verified headless: Clean Exit end to end (pickup -> Heat 3 -> evade -> safehouse -> 3 stars, $3,600 + 250 rep),
+  Cold Storage timeout fail, Downtown Circuit finish (1st, records saved), Ring and Canyon runs, jump detection for
+  Broken Bridge (46 m), Highway Gap (46 m), Car Carrier (73 m).
+
 ## Next
-- M7: missions, races, scoring/style system, cash/rep progression, garage upgrades, save game.
+- M8: title screen, garage (paint, upgrades, stat bars), settings (quality, volumes, rebinding, units, rain, time of day),
+  pause menu, intro flyover, HUD polish; then the QA checklist.
 
 ## Known issues
 - Ramp/merge geometry on the Highway Ring is functional but simple (taper merge, no exit lanes except via the same ramps).

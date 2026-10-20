@@ -123,6 +123,11 @@ export class Input {
     this.prevPad = new Set(this.padDown);
   }
 
+  // Raw key edge (fixed keys such as Enter that are not rebindable actions).
+  keyPressed(code) {
+    return this.pressedKeys.has(code);
+  }
+
   keyDown(action) {
     const codes = this.settings.get('bindings')[action] || [];
     for (const c of codes) if (this.keys.has(c)) return true;

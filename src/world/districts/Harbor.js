@@ -120,8 +120,8 @@ function carCarrier(gen, x, z) {
   const red = [0.75, 0.1, 0.08];
   gen.solidBox('paint', x, 1.9, z - 11, 2.5, 3.0, 3.2, 0, { color: red, batchOpts: { color: true } });
   gen.solidBox('paint', x, 0.9, z - 8.5, 2.5, 1.0, 2.0, 0, { color: [0.15, 0.15, 0.16], batchOpts: { color: true } });
-  // Lower deck.
-  gen.solidBox('darkMetal', x, 1.0, z + 2, 2.6, 0.3, 18, 0);
+  // Lower deck (only under the high end of the ramp, so it never pokes through it).
+  gen.solidBox('darkMetal', x, 1.0, z - 2, 2.6, 0.3, 10, 0);
   // Upper deck ramp: from ground at z+13 up to 4.4 m at z-7.
   const yA = 0;
   const yB = 4.4;
@@ -132,10 +132,10 @@ function carCarrier(gen, x, z) {
   const len = Math.hypot(run, yB - yA);
   gen.batch(x, z, 'yellow').orientedBox(c, q, 3.6, 0.25, len);
   gen.physics.fixedBox(c.x, c.y, c.z, 1.8, 0.125, len / 2, { kind: 'ramp', rotation: { x: q.x, y: q.y, z: q.z, w: q.w } });
-  // Side frame posts.
+  // Side frame posts, outside the ramp deck.
   for (let k = -8; k <= 12; k += 5) {
-    gen.solidBox('darkMetal', x - 1.35, 1.6, z + k, 0.15, 3.0, 0.15, 0);
-    gen.solidBox('darkMetal', x + 1.35, 1.6, z + k, 0.15, 3.0, 0.15, 0);
+    gen.solidBox('darkMetal', x - 2.0, 1.6, z + k, 0.15, 3.0, 0.15, 0);
+    gen.solidBox('darkMetal', x + 2.0, 1.6, z + k, 0.15, 3.0, 0.15, 0);
   }
   // Wheels.
   for (const k of [-11, -8.5, 4, 7, 10]) {

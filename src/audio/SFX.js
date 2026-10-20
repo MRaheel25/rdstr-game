@@ -251,6 +251,16 @@ export class SFX {
     o.dispose(0.5);
   }
 
+  // Style popup blip (big moves get a brighter two-note chime).
+  pop(big) {
+    const e = this.e;
+    if (!e.ok || !this.gate('pop', 0.05)) return;
+    const o = e.oneShotOut(null, { bus: e.ui, reverb: big ? 0.3 : 0 });
+    this.tone(o.input, { type: 'triangle', f0: big ? 988 : 1320, peak: big ? 0.09 : 0.05, decay: 0.12 });
+    if (big) this.tone(o.input, { type: 'triangle', f0: 1480, peak: 0.08, decay: 0.3, at: 0.07 });
+    o.dispose(0.6);
+  }
+
   // Short musical stingers (bypass the world muffle).
   stinger(kind) {
     const e = this.e;

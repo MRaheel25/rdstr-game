@@ -28,6 +28,9 @@ import { PoliceSystem } from '../ai/PoliceAI.js';
 import { Minimap } from '../ui/Minimap.js';
 import { Banner } from '../ui/Banner.js';
 import { AudioSystem } from '../audio/AudioSystem.js';
+import { Progress } from '../game/Progress.js';
+import { StyleScore } from '../game/Score.js';
+import { ActivityManager } from '../game/Activities.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -83,7 +86,8 @@ export class Game {
 
     this.player = new Vehicle(this.physics, ROADSTER, { position: this.world.spawn.position, yaw: this.world.spawn.yaw, kind: 'player', group: G.PLAYER });
     this.player.energy = new EnergySystem({});
-    this.playerVisual = new RoadsterModel(ROADSTER, this.settings.get('paint') || 'pearlWhite');
+    this.progress = new Progress();
+    this.playerVisual = new RoadsterModel(ROADSTER, this.progress.data.paint || 'pearlWhite');
     this.scene.add(this.playerVisual.root);
     this.playerInterp = this.physics.track(this.player.body, this.playerVisual.root);
     this.player.impactListeners.push((v, info) => this.onPlayerImpact(v, info));
@@ -124,6 +128,10 @@ export class Game {
     };
     this.setupPursuitEvents();
     this.audio = new AudioSystem(this);
+    this.progress.apply(this.player);
+    this.score = new StyleScore(this);
+    this.activities = new ActivityManager(this, this.progress, this.score);
+    this.inputLock = false;
 
     const missing = this.world.selfCheck();
     if (missing) console.warn(`Collider self-check: ${missing} static meshes without colliders`);
@@ -187,6 +195,8 @@ export class Game {
     this.hud.updateHeat(this.heat);
     this.radio.update(realDt);
     this.audio.update(realDt);
+    this.activities.update(realDt);
+    this.score.update(realDt);
     if (this.frame % 2 === 0) this.minimap.update(this.player, this.police, this.heat, this.world.gen.airStations);
     this.banner.update(realDt);
     this.updateHints(realDt);
@@ -238,6 +248,14 @@ export class Game {
     c.roll = a.roll;
     const e = this.player.energy;
     e.ghost = i.down('ghost') && e.battery > 0.5;
+    if (this.inputLock) {
+      // Race countdown: hold on the brakes (throttle still revs for a launch).
+      c.brake = 1;
+      c.handbrake = 1;
+      c.steer = 0;
+      c.rocket = false;
+      c.hover = false;
+    }
 
     // Self-righting: upside down or stuck for 2 s -> "Hold R to Reset".
     const p = this.player;
@@ -399,6 +417,10 @@ export class Game {
     if (this.player.hp <= 0 && !this.player.wrecked) this.onPlayerWrecked();
     this.takedownCam.cooldown = Math.max(0, this.takedownCam.cooldown - realDt);
     if (this.systems) for (const s of this.systems) s.update(dt, realDt);
+    if (this.activities) {
+      this.activities.step(dt);
+      this.score.step(dt);
+    }
   }
 
   // Pursuit radio chatter and consequences.
@@ -427,7 +449,8 @@ export class Game {
     ev.on('pursuitEnd', (e) => {
       if (e.reason === 'evaded') {
         radio.say('Suspect is gone. All units, return to patrol.', { priority: true });
-        this.banner.show('EVADED', 'Heat cleared', 'cool');
+        // Free-roam escapes show their reward banner from the activity manager.
+        if (this.activities && this.activities.active) this.banner.show('EVADED', 'Heat cleared', 'cool');
       }
     });
     ev.on('busted', () => this.onBusted());
@@ -478,16 +501,29 @@ export class Game {
 
   respawnAfter(reason) {
     if (this.onGameOver && this.onGameOver(reason)) return;
+    this.restoreAfterGameOver(reason);
+  }
+
+  // After a bust / wreck: police cleared, car repaired and placed back on the road.
+  restoreAfterGameOver(reason = 'reset') {
     this.police.clearAll();
     this.heat.clear(reason);
+    this.restorePlayer();
+    this.resetPlayer();
+  }
+
+  // Full repair: chassis, tyres, COPV and a minimum battery charge.
+  restorePlayer() {
     const p = this.player;
     p.hp = p.maxHp;
     p.wrecked = false;
     for (const w of p.wheels) w.popped = false;
     p.energy.refillPressure();
-    p.energy.battery = Math.max(p.energy.battery, 60);
+    p.energy.battery = Math.max(p.energy.battery, 80);
+    p.energy.temp = Math.min(p.energy.temp, 45);
+    p.energy.emp = 0;
     this.playerVisual.repair();
-    this.resetPlayer();
+    this.police.bustedFired = false;
   }
 
   isWet() {

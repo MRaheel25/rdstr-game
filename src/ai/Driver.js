@@ -119,7 +119,7 @@ export class Driver {
     // Speed: desired, limited by corners, the turn we're making and obstacles.
     let want = this.targetSpeed;
     want = Math.min(want, this.cornerSpeed());
-    want = Math.min(want, clamp(40 - Math.abs(angle) * 30, 8, 60));
+    want = Math.min(want, clamp(95 - Math.abs(angle) * 75, 8, 95));
     if (obstacleDist < 40) want = Math.min(want, Math.max(0, (obstacleDist - 6) * 0.9));
     const err = want - v.fwdSpeed;
     c.throttle = clamp(err * 0.35, 0, 1);
