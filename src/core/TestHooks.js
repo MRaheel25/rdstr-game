@@ -54,6 +54,24 @@ export function installTestHooks(game) {
       });
       return { final: this.state(), samples };
     },
+    async spawnFleet(x, z) {
+      const V = await import('../vehicle/VehicleConfig.js');
+      const P = await import('../vehicle/models/PoliceModels.js');
+      const list = [
+        [V.POLICE_CRUISER, new P.CruiserModel(V.POLICE_CRUISER, 7)],
+        [V.POLICE_INTERCEPTOR, new P.InterceptorModel(V.POLICE_INTERCEPTOR, 21)],
+        [V.SWAT_TRUCK, new P.SwatModel(V.SWAT_TRUCK, 4)],
+      ];
+      list.forEach(([cfg, model], i) => game.addNpc(cfg, model, { position: { x: x + i * 6, y: 1.2, z }, yaw: -Math.PI / 2 + 0.4 }));
+      const heli = new P.HelicopterModel();
+      heli.root.position.set(x + 8, 14, z + 12);
+      game.scene.add(heli.root);
+      const drone = new P.DroneModel();
+      drone.root.position.set(x - 4, 3.5, z + 4);
+      game.scene.add(drone.root);
+      game.showcase = { heli, drone };
+      step(60);
+    },
     clearControls() {
       Object.assign(game.player.controls, { throttle: 0, brake: 0, steer: 0, handbrake: 0, rocket: false, hover: false, pitch: 0, yaw: 0, roll: 0 });
     },

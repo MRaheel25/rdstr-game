@@ -11,7 +11,7 @@ import { setMaxAnisotropy } from '../world/Textures.js';
 import { Vehicle, QUERY } from '../vehicle/Vehicle.js';
 import { ROADSTER } from '../vehicle/VehicleConfig.js';
 import { EnergySystem } from '../vehicle/EnergySystem.js';
-import { ProxyModel } from '../vehicle/ProxyModel.js';
+import { RoadsterModel } from '../vehicle/models/RoadsterModel.js';
 import { CameraController } from '../camera/CameraController.js';
 import { HUD } from '../ui/HUD.js';
 import { clamp } from '../util/math.js';
@@ -40,6 +40,7 @@ export class Game {
     this.resetHold = 0;
     this.stuckTime = 0;
     this.events = events;
+    this.npcs = [];
     this.params = new URLSearchParams(location.search);
   }
 
@@ -70,7 +71,7 @@ export class Game {
 
     this.player = new Vehicle(this.physics, ROADSTER, { position: this.world.spawn.position, yaw: this.world.spawn.yaw, kind: 'player', group: G.PLAYER });
     this.player.energy = new EnergySystem({});
-    this.playerVisual = new ProxyModel(ROADSTER, 0xe8e8e8);
+    this.playerVisual = new RoadsterModel(ROADSTER, this.settings.get('paint') || 'pearlWhite');
     this.scene.add(this.playerVisual.root);
     this.playerInterp = this.physics.track(this.player.body, this.playerVisual.root);
     this.player.impactListeners.push((v, info) => this.onPlayerImpact(v, info));
@@ -129,6 +130,7 @@ export class Game {
       this.updateGameplay(dt, realDt);
     }
     this.playerVisual.update(dt, this.player);
+    for (const n of this.npcs) n.model.update(dt, n.vehicle, n.ctx || {});
     this.cameraCtl.update(dt, realDt, this.player, this.playerVisual.root, { pursuit: false });
     this.world.update(dt, this.playerVisual.root.position, this.camera, this.player.velocity);
     this.hud.update(realDt, this.player);
@@ -151,6 +153,7 @@ export class Game {
     }
     if (this.state !== 'playing') return;
     if (i.pressed('camera')) this.cameraCtl.cycle();
+    if (i.pressed('doors')) this.playerVisual.toggleDoors();
     if (i.pressed('modeTrack')) this.player.setMode('track');
     if (i.pressed('modeDrift')) this.player.setMode('drift');
     if (i.pressed('modeFlight')) this.player.setMode('flight');
@@ -201,11 +204,38 @@ export class Game {
     this.player.energy.update(h, this.player);
     this.player.physicsStep(h);
     this.world.props.checkVehicle(this.player, h);
+    for (const n of this.npcs) {
+      if (n.ai) n.ai(h, n);
+      n.vehicle.physicsStep(h);
+      if (n.vehicle.speed > 2) this.world.props.checkVehicle(n.vehicle, h);
+    }
   }
 
   postPhysics(h) {
     this.player.afterStep(h, this);
     this.safetyNet(this.player);
+    for (const n of this.npcs) {
+      n.vehicle.afterStep(h, this);
+      this.safetyNet(n.vehicle);
+    }
+  }
+
+  // Adds a physics vehicle with a visual model (police, traffic, rivals).
+  addNpc(cfg, model, { position, yaw = 0, kind = 'police', group = G.POLICE, ai = null } = {}) {
+    const vehicle = new Vehicle(this.physics, cfg, { position, yaw, kind, group });
+    this.scene.add(model.root);
+    const interp = this.physics.track(vehicle.body, model.root);
+    const npc = { vehicle, model, interp, ai, kind };
+    this.npcs.push(npc);
+    return npc;
+  }
+
+  removeNpc(npc) {
+    const i = this.npcs.indexOf(npc);
+    if (i >= 0) this.npcs.splice(i, 1);
+    this.physics.untrack(npc.interp);
+    this.scene.remove(npc.model.root);
+    npc.vehicle.destroy();
   }
 
   // If a vehicle's centre ever ends up inside a building collider, push it out along the
@@ -253,6 +283,11 @@ export class Game {
     if (info.other && info.other.kind === 'vehicle') dmg *= 0.6;
     if (info.roof) dmg += 12;
     v.damage(dmg);
+    // Dent the body panel nearest the contact point.
+    if (s > 6 && this.playerVisual.dent) {
+      const local = this.playerVisual.root.worldToLocal(info.point.clone());
+      this.playerVisual.dent(local, clamp(s / 12, 0.3, 3));
+    }
     this.cameraCtl.addShake(clamp(s / 30, 0.15, 1));
     this.input.rumble(clamp(s / 25, 0.2, 1), 200);
     if (s > 14) this.hitStop = Math.max(this.hitStop, 0.06);

@@ -33,7 +33,7 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 ## Milestones
 - [x] **M1 — Setup, collision and vehicle physics on a test city block**
 - [x] M2 — Full city world, lighting, sky, atmosphere and post-processing
-- [ ] M3 — Roadster and police models
+- [x] M3 — Roadster and police models
 - [ ] M4 — VFX, camera and game feel
 - [ ] M5 — Police AI and heat system
 - [ ] M6 — Audio
@@ -61,10 +61,24 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 - Quality presets drive pixel ratio, shadows, draw distance, prop distance, lamp lights, bloom resolution, SMAA, rain density.
   Auto quality drop when FPS < 45 for 5 s. Downtown: ~190 draw calls, ~530k triangles.
 
+## M3 results
+- `vehicle/models/BodyBuilder.js`: loft generator (spline-interpolated crease lines, banded panels with crisp creases,
+  exact wheel-arch cut-outs, separate door panels, mirrored halves, front/rear caps).
+- `RoadsterModel.js`: modelled from the reference photos (faceted wedge, fender peaks with triangular LED headlights,
+  full-width nose LED strip, bronze canopy, black sill rising to wide haunches, Kamm tail with full-width red bar,
+  RDSTR plate that flips down to reveal rocket nozzles, four copper cold-gas outlets, finned diffuser, aero wheels with
+  turbine blades and calipers). Animated: butterfly doors (G), wing rises with speed/braking/Flight mode, Flight-mode side
+  vents, brake/reverse lights, headlight spots, Ghost Mode lights-off. Damage: panel dents at impact points, cracked-glass
+  overlay, front splitter detaches. Paints: Pearl White, Red Multi-Coat, Midnight Silver, Matte Black, Deep Blue + 3 neon.
+- `PoliceModels.js`: Patrol Cruiser (B/W livery, HALCYON BAY POLICE doors, unit numbers, push bar, light bar), Interceptor
+  (low matte-black coupe, blue under-glow, hidden grille/rear strobes), armored SWAT truck (ram, SWAT livery), helicopter
+  (rotors, searchlight spot + beam), pursuit drone (rotors, strobes, EMP ring). Shared LightBar strobe pattern.
+- Draw-call control: wheels merged per material; police units bake a single-mesh LOD for distance.
+
 ## Next
-- M3: detailed Roadster model (from reference photos) and police vehicle models.
+- M4: VFX (tire smoke, skid marks, sparks, debris, thruster jets, rocket plume, explosions, splashes), camera feel,
+  Cold Snap, takedown cam, hit stop, screen effects.
 
 ## Known issues
-- Player car still uses the collider-shaped proxy model until M3.
 - Ramp/merge geometry on the Highway Ring is functional but simple (taper merge, no exit lanes except via the same ramps).
 - Headless (SwiftShader) FPS is not representative of GPU performance.

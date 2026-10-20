@@ -168,4 +168,55 @@ export default {
     await sleep(2500);
     await shot('aerial_north');
   },
+
+  async car({ page, sleep, shot }) {
+    await page.evaluate(() => { __game.test.hold(true); __game.test.teleport(0, 0.7, 1120, -Math.PI / 2, 0); __game.test.simulate(0.6, {}); });
+    // Car faces +x: camera angle a puts the camera at (sin a, cos a) * r.
+    const views = [
+      ['side', [0, 1.0, 0], 0, 6.5, 0.7, 40],
+      ['front34', [0, 0.8, 0], Math.PI / 4, 6.0, 1.3, 40],
+      ['front', [0, 0.7, 0], Math.PI / 2, 6.5, 0.9, 38],
+      ['rear34', [0, 0.8, 0], -Math.PI / 4 - 0.2, 6.2, 1.3, 40],
+      ['top', [0, 0.5, 0], Math.PI / 3, 4.0, 4.2, 45],
+    ];
+    for (const [name, off, ang, r, h, fov] of views) {
+      await page.evaluate(([ang, r, h, fov]) => {
+        const g = __game;
+        const t = g.playerVisual.root.position.clone();
+        g.cameraCtl.playShot({ type: 'orbit', target: t, startAngle: ang, speed: 0, radius: r, height: h, lookY: 0.45, fov, duration: 999, collide: false });
+      }, [ang, r, h, fov]);
+      await sleep(1200);
+      await shot('car_' + name);
+    }
+    await page.keyboard.press('KeyG');
+    await sleep(1500);
+    await shot('car_doors');
+  },
+
+  async fleet({ page, sleep, shot }) {
+    await page.evaluate(async () => {
+      __game.test.hold(true);
+      __game.test.teleport(-20, 0.7, 1150, -Math.PI / 2, 0);
+      await __game.test.spawnFleet(-6, 1130);
+      const THREE = __game.THREE;
+      const s = __game.showcase;
+      const loop = () => { s.heli.update(1 / 60); s.drone.update(1 / 60); s.heli.aim(new THREE.Vector3(0, 0, 1132), 1); requestAnimationFrame(loop); };
+      loop();
+    });
+    const views = [
+      ['fleet_wide', [-30, 6, 1105], [2, 2, 1132], 50],
+      ['fleet_cruiser', [-3, 1.8, 1124], [-6, 0.6, 1130], 45],
+      ['fleet_interceptor', [3, 1.6, 1124], [0, 0.5, 1130], 45],
+      ['fleet_swat', [10, 2.5, 1122], [6, 1.2, 1130], 50],
+      ['fleet_heli', [-8, 10, 1120], [2, 14, 1142], 50],
+    ];
+    for (const [name, pos, tgt, fov] of views) {
+      await page.evaluate(([pos, tgt, fov]) => {
+        const THREE = __game.THREE;
+        __game.cameraCtl.playShot({ type: 'fixed', position: new THREE.Vector3(...pos), target: new THREE.Vector3(...tgt), fov, duration: 999 });
+      }, [pos, tgt, fov]);
+      await sleep(1300);
+      await shot(name);
+    }
+  },
 };
