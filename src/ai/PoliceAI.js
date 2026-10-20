@@ -574,8 +574,8 @@ export class PoliceSystem {
     if (heat.phase === 'pursuit' && cfg.roadblocks) {
       this.roadblockTimer -= dt;
       if (this.roadblockTimer <= 0 && this.roadblocks.length < 2) {
-        this.roadblockTimer = heat.level >= 5 ? 14 : heat.level >= 4 ? 18 : 24;
-        this.placeRoadblock();
+        // A failed placement (no road far enough ahead, player crawling) retries soon.
+        this.roadblockTimer = this.placeRoadblock() ? (heat.level >= 5 ? 14 : heat.level >= 4 ? 18 : 24) : 3;
       }
       if (cfg.box) {
         this.rollingTimer -= dt;
@@ -614,7 +614,7 @@ export class PoliceSystem {
     const g = this.game;
     const player = g.player;
     const r = this.graph.nearest(player.position, (e) => e.kind !== 'stunt');
-    if (!r || player.speed < 6) return;
+    if (!r || player.speed < 6) return false;
     let edge = r.edge;
     let forward = r.dir.dot(player.velocity) >= 0;
     let node = forward ? edge.b : edge.a;
@@ -624,7 +624,7 @@ export class PoliceSystem {
     let guard = 0;
     while (dist < want && guard++ < 8) {
       const opts = node.edges.filter((e) => e !== edge && e.kind !== 'stunt');
-      if (!opts.length) return;
+      if (!opts.length) return false;
       let best = null;
       let bd = -Infinity;
       for (const e of opts) {
@@ -648,13 +648,13 @@ export class PoliceSystem {
     const dir = new THREE.Vector3();
     this.graph.sample(edge, forward ? s : edge.length - s, pos, dir);
     if (!forward) dir.negate();
-    if (pos.distanceTo(player.position) < 120) return;
+    if (pos.distanceTo(player.position) < 120) return false;
     const width = edge.kind === 'highway' ? 22 : edge.kind === 'canyon' || edge.kind === 'ramp' ? 9 : 15;
     const right = new THREE.Vector3(-dir.z, 0, dir.x);
     const heavy = this.heat.config.heavy;
     const units = [];
     const count = Math.min(edge.kind === 'highway' ? 4 : 3, MAX_TOTAL - this.units.filter((u) => !u.v.wrecked).length);
-    if (count < 2) return;
+    if (count < 2) return false;
     const spacing = width / count;
     const gapIndex = heavy ? Math.floor(Math.random() * count) : -1;
     const yaw = Math.atan2(-right.x, -right.z);
@@ -675,6 +675,7 @@ export class PoliceSystem {
     const nums = units.slice(0, 2).map((u) => u.num).join(' and ');
     this.radio.say(`Units ${nums}, set a roadblock on ${rb.street}.${rb.spike ? ' Spike strips are down.' : ''}`, { priority: true });
     g.events.emit('roadblock', { rb });
+    return true;
   }
 
   rollingBlock(r) {
@@ -761,9 +762,11 @@ export class PoliceSystem {
   // Box-in at Heat 4+: front / left / right / back roles for the four closest seeing units.
   assignBoxRoles() {
     const player = this.game.player;
-    const cands = this.chaseUnits.filter((u) => u.los && u.v.position.distanceTo(player.position) < 70 && u.role === 'chase');
+    const seenRecently = this.game.time - this.heat.lastSeen < 2;
+    const cands = this.chaseUnits.filter((u) => (u.los || seenRecently) && u.v.position.distanceTo(player.position) < 90 && u.role === 'chase');
     for (const u of this.units) u.boxRole = null;
-    if (!this.heat.config.box || cands.length < 3) return;
+    // Two units already make a box (one behind, one alongside); more fill the other slots.
+    if (!this.heat.config.box || cands.length < 2) return;
     cands.sort((a, b) => a.v.position.distanceTo(player.position) - b.v.position.distanceTo(player.position));
     const roles = ['back', 'left', 'right', 'front'];
     // Give each role to the unit best positioned for it.

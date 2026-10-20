@@ -160,11 +160,11 @@ export class CameraController {
     _desired.set(Math.sin(this.yaw) * this.dist, height, Math.cos(this.yaw) * this.dist).add(_target);
     // Keep the camera above ground level near the car.
     _desired.y = Math.max(_desired.y, pos.y + 0.6);
-    // Collision: pull in fast, ease out slowly.
+    // Collision: snap in at once (never a frame inside a wall), ease back out slowly.
     this.collide(_target, _desired, _v2);
     const safeLen = _v2.distanceTo(_target);
     const wantLen = _desired.distanceTo(_target);
-    if (safeLen < this.armLen) this.armLen = lerp(this.armLen, safeLen, 1 - Math.exp(-25 * realDt));
+    if (safeLen < this.armLen) this.armLen = safeLen;
     else this.armLen = lerp(this.armLen, safeLen, 1 - Math.exp(-2.5 * realDt));
     this.armLen = Math.min(this.armLen, wantLen);
     _v.subVectors(_desired, _target).normalize();

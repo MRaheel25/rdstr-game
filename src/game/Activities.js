@@ -145,7 +145,7 @@ export class ActivityManager {
         if (a.nextGate && ni != null) a.nextGate.move(race.center[ni]);
       }
       g.minimap.setMission({ x: c.x, z: c.z });
-      const text = a.def.scoring === 'drift' ? 'DRIFT TO THE SUMMIT' : `LAP ${Math.min(a.def.laps, Math.floor(race.player.cp / race.cpPerLap) + 1)}/${a.def.laps}`;
+      const text = a.def.scoring === 'drift' ? 'DRIFT THE CANYON' : `LAP ${Math.min(a.def.laps, Math.floor(race.player.cp / race.cpPerLap) + 1)}/${a.def.laps}`;
       this.ui.objective(`${a.def.name.toUpperCase()} · ${text}`, null);
       return;
     }

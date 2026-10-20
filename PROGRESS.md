@@ -6,6 +6,7 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 - Static site, no build step: serve the repo root (`node tools/serve.mjs 8123`) and open `http://localhost:8123/`.
   The game opens on the title screen; `?play=1` jumps straight into free roam.
 - GitHub Pages serves `index.html` from the root (`.nojekyll` present). Libraries are vendored in `vendor/` and loaded through the import map; the game makes zero external requests.
+- Acceptance tests: `SCEN=./qa.mjs node tools/smoke.mjs t<N> screenshots/qa` (N = 2..16, see `tools/qa.mjs`).
 - Headless QA: `node tools/smoke.mjs <scenario> screenshots/<prefix>` (scenarios in `tools/scenarios.mjs`: `boot`, `physics`, `wall`, `drive`, `keys`, `tour`, `car`, `fleet`, `fx`, `pursuit`, `evade`, `busted`, `audio`, `missions`, `race` (env `RACE=ring-sprint|downtown-circuit|canyon-drift`), `score`, `menus` (run with `EXTRA='&menu=1'`)). `?test=1` exposes `window.__game.test` (deterministic physics stepping).
 
 ## Architecture (src/)
@@ -182,9 +183,37 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
   as rings, with a cool screen tint.
 - Navigation: keyboard (arrows / WASD, Enter, Esc), mouse (hover, click, sliders), gamepad (D-pad / stick, A, B, Menu).
 
-## Next
-- Run the QA checklist (16 acceptance tests) and fix failures.
+## QA checklist results (headless Chromium + SwiftShader, `tools/qa.mjs`)
+| # | Test | Result | How it was checked |
+|---|------|--------|--------------------|
+| 1 | Top speed + rockets into a building | PASS | `wall`: 0°, 30°, 60° at 250+ mph, never penetrates |
+| 2 | Camera near walls | PASS | 1020 camera frames (wall push, reverse into wall, spins, garage, both chase cams): 0 inside geometry |
+| 3 | Broken Bridge jump | PASS | 55 m jump, 11 m peak, air roll to ~30° and back with thrusters, clean landing |
+| 4 | Land upside down | PASS | roof impact damage, "HOLD R TO RESET" prompt, holding R rights the car |
+| 5 | Drift mode, canyon road | PASS | 3 hairpins of 156-160° (~26-29 m radius); Drift-mode slide held 5.4 s at 38° avg slip with skid marks, smoke, +2% battery |
+| 6 | Heat 3 to 5 | PASS | roadblocks, spike strips, helicopter, box-in roles (4 units), 2 EMP drones at 5, units capped at 12 |
+| 7 | Break line of sight | PASS | search cones present while evading, EVADE fills, COOLDOWN, heat cleared |
+| 8 | Ghost Mode | PASS | headlights 0, motor gain ~0, world low-pass 1.1 kHz, speed capped at 150 mph, battery drains |
+| 9 | Cold Snap | PASS | time scale 0.25, orbit camera, frost shockwave event on landing |
+| 10 | Takedown | PASS | takedown event, crash cam + 0.22x slow motion, +500 style, wreck stays on the map |
+| 11 | Score for a 2-3 min pursuit | PASS | scripted 150 s pursuit timeline through the real scoring code: 25,755 |
+| 12 | 20 minutes of play | PASS | 10 min Heat 4 + explosion/debris stress: particles at caps, debris <= 36, GPU geometries rise and fall, heap stable |
+| 13 | Gamepad | PASS | mocked Gamepad API: triggers, stick, X rockets, Y ghost, A hover, vibration call |
+| 14 | Settings | PASS | quality, volumes, rebinding persist across reload and take effect |
+| 15 | Street races | PASS | Downtown (won, best time + lap saved), Ring Sprint (won, 2 laps), Canyon Drift Run (finished, best time + drift score saved) |
+| 16 | 5-star heat for 3 minutes | PASS | units <= 11 of 12, drones 2, ~1.5-2 ms of CPU per 1/120 s step incl. AI |
 
-## Known issues
-- Ramp/merge geometry on the Highway Ring is functional but simple (taper merge, no exit lanes except via the same ramps).
-- Headless (SwiftShader) FPS is not representative of GPU performance.
+Fixes made during QA: camera snaps in instantly when a wall appears (one frame inside geometry before); cars on their
+roof scrub to a stop (they slid forever on the low-friction chassis) and the reset prompt accepts a slowly sliding wreck;
+canyon switchbacks rebuilt as real ~26-29 m hairpins and the Canyon Drift Run now covers the whole loop (up and back down);
+box-in from 2 units within 90 m; failed roadblock placements retry after 3 s; NPC model geometry is disposed on despawn
+(GPU geometry count used to climb); one physics step at start-up so early raycasts see the city.
+
+## Known issues / limits
+- All verification is headless (SwiftShader renders ~0.5-2 fps), so real GPU frame rates were not measured; #12 / #16
+  check resource bounds and simulation cost instead. Worth a pass on real hardware.
+- #5 and #11 use scripted inputs / timelines: drifting and scoring feel need a human playtest for tuning.
+- #13 uses a mocked gamepad; vibration support depends on the browser.
+- Rolling roadblocks only happen on the Highway Ring; the Container Stack jump is not covered by an automated test.
+- Ramp/merge geometry on the Highway Ring is functional but simple (taper merges).
+

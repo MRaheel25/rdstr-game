@@ -207,6 +207,18 @@ export class Vehicle {
     const body = this.body;
     const c = this.controls;
     this.readState();
+    // Lying on the roof or side: the low-friction chassis would slide forever, so scrub speed.
+    let scrub = false;
+    if (this.up.y < 0.35 && this.groundedCount === 0) {
+      _tmp.set(0, -1, 0);
+      scrub = !!this.physics.raycast(this.position, _tmp, 1.7, this.wheelQueryGroups, body);
+    }
+    const damping = scrub ? 2.2 : 0;
+    if (damping !== this.linDamping) {
+      this.linDamping = damping;
+      body.setLinearDamping(damping);
+      body.setAngularDamping(scrub ? 1.2 : 0.12);
+    }
     _pos.copy(this.position);
     _quat.copy(this.quaternion);
     _up.copy(this.up);

@@ -6,13 +6,18 @@ import { Terrain, fbm } from '../Terrain.js';
 import { buildRibbon, smoothPath } from '../RoadBuilder.js';
 import { smoothstep } from '../../util/math.js';
 
+// Control points: switchbacks whose legs run ~50 m apart, giving ~26-29 m radius hairpins
+// for drifting, joined by long climbing legs.
 const UP = [
-  [0, -700], [0, -760], [-60, -830], [-180, -870], [-320, -880], [-420, -930], [-400, -985], [-280, -1010],
-  [-120, -1020], [40, -1050], [130, -1110], [100, -1170], [-20, -1200], [-200, -1230], [-340, -1270], [-430, -1310],
+  [0, -700], [0, -760], [-60, -830], [-180, -868], [-300, -890], [-375, -900], [-408, -908], [-424, -924],
+  [-418, -942], [-394, -950], [-340, -958], [-280, -985], [-200, -1010], [-120, -1022], [0, -1036], [70, -1050],
+  [108, -1062], [126, -1080], [118, -1100], [94, -1106], [40, -1112], [-20, -1140], [-120, -1200], [-240, -1240],
+  [-340, -1272], [-430, -1310],
 ];
 const DOWN = [
-  [-430, -1310], [-540, -1300], [-650, -1250], [-720, -1170], [-700, -1090], [-600, -1060], [-540, -1040],
-  [-560, -990], [-660, -960], [-720, -900], [-680, -820], [-520, -760], [-390, -722], [-360, -700],
+  [-430, -1310], [-540, -1300], [-650, -1250], [-720, -1170], [-700, -1090], [-640, -1064], [-570, -1058],
+  [-534, -1052], [-516, -1036], [-522, -1016], [-548, -1008], [-610, -1000], [-670, -975], [-720, -920],
+  [-700, -850], [-600, -790], [-520, -760], [-390, -722], [-360, -700],
 ];
 const SUMMIT_Y = 104;
 
@@ -77,7 +82,20 @@ export function buildCanyon(gen) {
   gen.canyon = { up, down, upTotal: upRoad.total };
 
   // Covered gallery (tunnel) on the climb.
-  gallery(gen, upRoad, 820, 940);
+  // On the long straight leg between the two climbing hairpins.
+  const sAt = (x, z) => {
+    let best = 0;
+    let bd = Infinity;
+    up.forEach((p, i) => {
+      const d = (p.x - x) ** 2 + (p.z - z) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = i;
+      }
+    });
+    return (best / (up.length - 1)) * upRoad.total;
+  };
+  gallery(gen, upRoad, sAt(-190, -1012), sAt(-60, -1029));
   lookout(gen, up);
   // Pine forest.
   const rng = gen.rng;

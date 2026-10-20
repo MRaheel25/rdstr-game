@@ -131,6 +131,9 @@ export class Game {
     this.setupPursuitEvents();
     this.audio = new AudioSystem(this);
     this.progress.apply(this.player);
+    // Rapier only builds its query structures during step(): run one so start-up raycasts
+    // (activity marker heights) see the freshly built city.
+    this.physics.world.step(this.physics.eventQueue);
     this.score = new StyleScore(this);
     this.activities = new ActivityManager(this, this.progress, this.score);
     this.inputLock = false;
@@ -286,7 +289,7 @@ export class Game {
 
     // Self-righting: upside down or stuck for 2 s -> "Hold R to Reset".
     const p = this.player;
-    const stuck = (p.up.y < 0.3 && p.speed < 3) || (p.controls.throttle > 0.5 && p.speed < 0.6 && p.groundedCount < 3);
+    const stuck = (p.up.y < 0.3 && p.speed < 6 && p.groundedCount === 0) || (p.controls.throttle > 0.5 && p.speed < 0.6 && p.groundedCount < 3);
     this.stuckTime = stuck ? this.stuckTime + realDt : 0;
     const showPrompt = this.stuckTime > 2;
     this.hud.prompt(showPrompt ? 'HOLD  R  TO RESET' : null);
@@ -346,6 +349,11 @@ export class Game {
     this.physics.untrack(npc.interp);
     this.scene.remove(npc.model.root);
     npc.vehicle.destroy();
+    // Free the model's GPU buffers (each unit builds its own body geometry). Shared
+    // materials and cached textures are left alone.
+    npc.model.root.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+    });
   }
 
   // If a vehicle's centre ever ends up inside a building collider, push it out along the

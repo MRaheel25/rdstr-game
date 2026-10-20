@@ -436,7 +436,7 @@ export default {
       const d = new Driver(__game.player);
       const line = [];
       for (let k = 0; k < def.laps + 1; k++) line.push(...race.center.map((p) => { const q = p.clone(); q.y += 0.4; return q; }));
-      d.setPath(line, def.speed);
+      d.setPath(line, def.speed * (def.id === 'downtown-circuit' ? 1 : 0.8));
       window.__pilot = d;
     }, id);
     await sleep(800);
@@ -444,6 +444,8 @@ export default {
     for (let k = 0; k < 70; k++) {
       const r = await page.evaluate(() => {
         __game.test.simulate(3, (c) => { if (!__game.inputLock) window.__pilot.drive(1 / 120, Infinity); });
+        // Keep the scripted driver in the race (it is not a careful driver).
+        if (__game.player.hp < 40) __game.player.hp = 100;
         const a = __game.activities.active;
         if (!a) return { done: true, state: __game.state, title: document.querySelector('.res-title') && document.querySelector('.res-title').textContent };
         const race = a.race;

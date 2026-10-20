@@ -83,11 +83,11 @@ export const RACES = [
   },
   {
     id: 'canyon-drift', name: 'Canyon Drift Run', district: 'canyon', rep: 1800, scoring: 'drift', laps: 1,
-    brief: 'Point to point up the Hillside Canyon hairpins to the Summit. Scored on drift style, not time: hold long slides, link corners, keep it off the rails. Drift mode recommended.',
+    brief: 'Point to point over the Hillside Canyon: up the hairpins to the Summit and back down the far side. Scored on drift style, not time: hold long slides, link corners, keep it off the rails. Drift mode recommended.',
     reward: { cash: 6000, rep: 450 },
     speed: 36,
     lineOffset: 2.2,
-    line: (world) => world.gen.canyon.up.map((p) => p.clone()),
+    line: (world) => [...world.gen.canyon.up, ...world.gen.canyon.down.slice(1)].map((p) => p.clone()),
     closed: false,
     cpSpacing: 140,
   },
