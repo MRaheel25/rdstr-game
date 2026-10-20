@@ -245,6 +245,7 @@ export class ActivityManager {
   begin(def) {
     const g = this.game;
     this.ui.close();
+    g.cameraCtl.clearShot();
     g.hud.show(true);
     this.cleanup();
     g.audio && g.audio.ui('buy');
@@ -501,12 +502,16 @@ export class ActivityManager {
     g.banner.hide();
     g.hud.show(false);
     this.score.clearPopups();
+    // Success: slow orbit around the car behind the results; failure: hold the frozen frame.
+    if (!r.fail) g.cameraCtl.playShot({ type: 'orbit', radius: 7.5, height: 2.4, speed: 0.22, startAngle: g.player.yaw + 2.4, fov: 50, duration: 1e6 });
     this.ui.raceHud(null);
     this.ui.objective(null);
     this.ui.results(r, {
       primary: () => {
         this.ui.close();
         this.cleanup();
+        g.cameraCtl.clearShot();
+        g.cameraCtl.initialized = false;
         g.hud.show(true);
         g.state = 'playing';
         if (gameOver) g.restoreAfterGameOver();

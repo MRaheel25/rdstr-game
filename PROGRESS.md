@@ -4,8 +4,9 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 
 ## How to run
 - Static site, no build step: serve the repo root (`node tools/serve.mjs 8123`) and open `http://localhost:8123/`.
+  The game opens on the title screen; `?play=1` jumps straight into free roam.
 - GitHub Pages serves `index.html` from the root (`.nojekyll` present). Libraries are vendored in `vendor/` and loaded through the import map; the game makes zero external requests.
-- Headless QA: `node tools/smoke.mjs <scenario> screenshots/<prefix>` (scenarios in `tools/scenarios.mjs`: `boot`, `physics`, `wall`, `drive`, `keys`, `tour`, `car`, `fleet`, `fx`, `pursuit`, `evade`, `busted`, `audio`, `missions`, `race` (env `RACE=ring-sprint|downtown-circuit|canyon-drift`), `score`). `?test=1` exposes `window.__game.test` (deterministic physics stepping).
+- Headless QA: `node tools/smoke.mjs <scenario> screenshots/<prefix>` (scenarios in `tools/scenarios.mjs`: `boot`, `physics`, `wall`, `drive`, `keys`, `tour`, `car`, `fleet`, `fx`, `pursuit`, `evade`, `busted`, `audio`, `missions`, `race` (env `RACE=ring-sprint|downtown-circuit|canyon-drift`), `score`, `menus` (run with `EXTRA='&menu=1'`)). `?test=1` exposes `window.__game.test` (deterministic physics stepping).
 
 ## Architecture (src/)
 | Module | Responsibility |
@@ -37,6 +38,8 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 | `game/Score.js` | Style score: base values, chain multiplier x1-x10, bank after 3 s, crash loses chain, 3D popups |
 | `game/Activities.js`, `Missions.js`, `Races.js` | Free-roam markers, briefing -> run -> results, 10 story missions, 3 street races with rivals |
 | `game/Markers.js`, `game/Jumps.js` | Light columns / checkpoint gates; named stunt-jump detection |
+| `ui/Menu.js`, `ui/GarageScene.js` | Title, mission/race lists, Garage (paint, upgrades, stat bars), Settings (+ key rebinding), Pause, Controls; the showroom scene |
+| `fx/XRay.js` | X-Ray view: vehicles glow through buildings |
 | `ui/ActivityUI.js` | Briefing cards, results screen, race HUD, countdown, objective line |
 | `ai/Heat.js`, `ai/PoliceAI.js`, `ai/Radio.js` | Heat 0-5, evade/cooldown loop, busted timer; police units, roadblocks, spikes, heli, drones; dispatch subtitles |
 
@@ -48,7 +51,7 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 - [x] M5 — Police AI and heat system
 - [x] M6 — Audio
 - [x] M7 — Missions, races, scoring and progression
-- [ ] M8 — Menus, garage, settings and polish
+- [x] M8 — Menus, garage, settings and polish
 
 ## M1 results (measured headless with `node tools/smoke.mjs physics` / `wall`)
 - 0-60 mph 2.1 s, 0-100 mph 3.6 s, top speed 253 mph, 319 mph with Rear Rockets.
@@ -160,9 +163,27 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
   Cold Storage timeout fail, Downtown Circuit finish (1st, records saved), Ring and Canyon runs, jump detection for
   Broken Bridge (46 m), Highway Gap (46 m), Car Carrier (73 m).
 
+## M8 results
+- Title screen: the player's Roadster on a turntable in a dark showroom (glossy floor, ceiling strips, sweeping spot lights,
+  colored rim lights, baked garage reflections), glitch-animated RDSTR logo, Continue (drives to the next story job),
+  Free Roam, Missions, Street Races, Garage, Settings; career line (cash, rep, missions). Menu music mode.
+- Mission / race lists with type, district, lock reasons (rep / district), stars and best times; picking one drops you near
+  its marker and opens the briefing after the intro.
+- Garage: drag to rotate / scroll to zoom, paints (preview on focus, buy, equip), 5 upgrades x 3 levels with pips and costs,
+  stat bars with a green preview of the next level.
+- Settings (saved): quality preset, auto quality, motion blur, camera shake, time of day (applied live), rain, master /
+  music / SFX volume, speed units, full keyboard rebinding (press a key; a key moves between actions), reset controls,
+  reset career (with confirmation). Reachable from the title and the pause menu.
+- Pause (Esc / Menu button): resume, restart / quit mission or race, controls, settings, garage, quit to title; the controls
+  list (with the player's current bindings) is shown beside it.
+- Intro flyover of the city on every start (skippable with Enter / Space / Esc), "HALCYON BAY" title card.
+- Mission complete / race finish: slow orbit shot around the car behind the results; fails freeze the final frame.
+- X-Ray view (X / D-pad down): police (red/blue), rivals (magenta), traffic and the player glow through buildings, air units
+  as rings, with a cool screen tint.
+- Navigation: keyboard (arrows / WASD, Enter, Esc), mouse (hover, click, sliders), gamepad (D-pad / stick, A, B, Menu).
+
 ## Next
-- M8: title screen, garage (paint, upgrades, stat bars), settings (quality, volumes, rebinding, units, rain, time of day),
-  pause menu, intro flyover, HUD polish; then the QA checklist.
+- Run the QA checklist (16 acceptance tests) and fix failures.
 
 ## Known issues
 - Ramp/merge geometry on the Highway Ring is functional but simple (taper merge, no exit lanes except via the same ramps).

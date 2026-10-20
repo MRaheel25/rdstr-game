@@ -48,7 +48,8 @@ export class ActivityUI {
     else if (e.code === 'KeyR') h.retry && h.retry();
     else return;
     e.preventDefault();
-    e.stopPropagation();
+    // Consumed here: don't let the same key also reach the game (Esc would open the pause menu).
+    this.game.input.pressedKeys.delete(e.code);
   }
 
   // Gamepad: A = primary, B = cancel, Y = retry.

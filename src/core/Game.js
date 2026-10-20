@@ -31,6 +31,8 @@ import { AudioSystem } from '../audio/AudioSystem.js';
 import { Progress } from '../game/Progress.js';
 import { StyleScore } from '../game/Score.js';
 import { ActivityManager } from '../game/Activities.js';
+import { Menu } from '../ui/Menu.js';
+import { XRay } from '../fx/XRay.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -132,6 +134,8 @@ export class Game {
     this.score = new StyleScore(this);
     this.activities = new ActivityManager(this, this.progress, this.score);
     this.inputLock = false;
+    this.menu = new Menu(this);
+    this.xray = new XRay(this);
 
     const missing = this.world.selfCheck();
     if (missing) console.warn(`Collider self-check: ${missing} static meshes without colliders`);
@@ -142,8 +146,10 @@ export class Game {
     }
     this.setLoading(100, 'Ready');
     document.getElementById('loading').classList.add('done');
-    this.state = 'playing';
     this.ready = true;
+    // Headless tests and ?play=1 skip the title screen.
+    if ((this.params.get('test') && !this.params.get('menu')) || this.params.get('play')) this.state = 'playing';
+    else this.menu.showTitle();
     this.last = performance.now();
     requestAnimationFrame((t) => this.loop(t));
   }
@@ -159,7 +165,17 @@ export class Game {
   tick(realDt) {
     this.frame++;
     this.input.update();
+    // Title / showroom menus render the garage scene only.
+    if (this.state === 'title') {
+      this.menu.update(realDt);
+      this.audio.update(realDt);
+      this.gfx.render(realDt);
+      this.updateDebugOverlay(realDt);
+      this.input.endFrame();
+      return;
+    }
     this.handleGlobalKeys();
+    if (this.menu.open) this.menu.update(realDt);
 
     // Time scale: slow motion and hit stop (paused in photo mode / menus).
     if (this.slowmo.timer > 0) {
@@ -197,6 +213,7 @@ export class Game {
     this.audio.update(realDt);
     this.activities.update(realDt);
     this.score.update(realDt);
+    this.xray.update(realDt);
     if (this.frame % 2 === 0) this.minimap.update(this.player, this.police, this.heat, this.world.gen.airStations);
     this.banner.update(realDt);
     this.updateHints(realDt);
@@ -221,7 +238,17 @@ export class Game {
       this.photo.toggle();
       return;
     }
+    if (i.pressed('pause') && this.state === 'playing' && !this.menu.open) {
+      this.menu.showPause();
+      return;
+    }
+    if (this.state === 'intro' && (i.keyPressed('Enter') || i.keyPressed('Space') || i.keyPressed('Escape') || i.pressed('hover'))) {
+      this.cameraCtl.clearShot();
+      this.endIntro();
+      return;
+    }
     if (this.state !== 'playing') return;
+    if (i.pressed('xray')) this.xray.toggle();
     if (i.pressed('help')) {
       this.showHints = !this.showHints;
       this.hintsTimer = this.showHints ? 1e9 : 0;
@@ -643,13 +670,84 @@ export class Game {
     }
   }
 
+  // ---- game flow: title -> (intro flyover) -> play; pause -> quit to title -----------------
+  startPlay({ continueStory = false, activity = null } = {}) {
+    const m = this.menu;
+    m.close();
+    m.leaveShowroom();
+    this.audio.setMenu(false);
+    this.police.clearAll();
+    this.heat.clear('reset');
+    this.restorePlayer();
+    let spot = { x: 3.8, z: 70, yaw: 0 };
+    const target = activity || (continueStory ? m.nextMission() : null);
+    if (target) {
+      // Park just before the activity's marker, facing it.
+      const s = target.start;
+      const yaw = target.yaw || 0;
+      spot = { x: s.x + Math.sin(yaw) * 14, z: s.z + Math.cos(yaw) * 14, y: s.y, yaw };
+    }
+    this.activities.teleport(new THREE.Vector3(spot.x, spot.y || 0, spot.z), spot.yaw);
+    this.hud.show(true);
+    this.pendingActivity = activity;
+    this.playIntro();
+  }
+
+  // Intro flyover of the city that ends behind the car.
+  playIntro() {
+    const p = this.player.position;
+    const f = this.player.forward;
+    const end = p.clone().addScaledVector(f, -6.5).add(new THREE.Vector3(0, 2.2, 0));
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(p.x - 420, 220, p.z + 380),
+      new THREE.Vector3(p.x - 200, 140, p.z + 160),
+      new THREE.Vector3(p.x - 60, 60, p.z + 40).addScaledVector(f, -30),
+      p.clone().addScaledVector(f, -24).add(new THREE.Vector3(0, 12, 0)),
+      end,
+    ]);
+    const look = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 60, -200),
+      new THREE.Vector3(p.x * 0.5, 40, p.z * 0.5 - 100),
+      p.clone().addScaledVector(f, 30),
+      p.clone().addScaledVector(f, 12).add(new THREE.Vector3(0, 1, 0)),
+      p.clone().addScaledVector(f, 8).add(new THREE.Vector3(0, 1, 0)),
+    ]);
+    this.state = 'intro';
+    this.hud.show(false);
+    this.cameraCtl.playShot({ type: 'path', curve, lookCurve: look, duration: 6.5, fov: 55, onDone: () => this.endIntro() });
+    this.banner.show('HALCYON BAY', '2:47 AM · after the rain', 'cool', 4);
+  }
+
+  endIntro() {
+    if (this.state !== 'intro') return;
+    this.state = 'playing';
+    this.hud.show(true);
+    this.cameraCtl.initialized = false;
+    if (this.pendingActivity) {
+      const a = this.pendingActivity;
+      this.pendingActivity = null;
+      if (this.progress.rep >= a.rep && this.progress.districtOpen(a.district)) this.activities.openBriefing(a);
+    }
+  }
+
+  quitToTitle() {
+    this.activities.quit();
+    this.activities.ui.close();
+    this.police.clearAll();
+    this.heat.clear('reset');
+    this.cameraCtl.clearShot();
+    this.inputLock = false;
+    if (this.xray.on) this.xray.toggle();
+    this.menu.showTitle();
+  }
+
   updateFx(realDt) {
     const fx = this.gfx.fx;
     const p = this.player;
     const boost = p.thrust.rocket ? 1 : 0;
     fx.speedBlur += ((boost ? 0.55 : 0) + Math.max(0, (p.speed - 70) / 140) * 0.25 - fx.speedBlur) * Math.min(1, realDt * 4);
     fx.aberration += ((boost ? 1 : 0) - fx.aberration) * Math.min(1, realDt * 5);
-    fx.ghost += ((p.energy.ghost ? 1 : 0) - fx.ghost) * Math.min(1, realDt * 4);
+    fx.ghost += ((p.energy.ghost ? 1 : this.xray.on ? 0.55 : 0) - fx.ghost) * Math.min(1, realDt * 4);
     fx.lines += ((boost ? 1 : Math.max(0, (p.speed - 85) / 40)) - fx.lines) * Math.min(1, realDt * 4);
     const raining = this.world.env.preset.rain && this.settings.get('rain');
     fx.rainLens += ((raining && p.speed > 12 ? Math.min(1, p.speed / 60) : 0) - fx.rainLens) * Math.min(1, realDt * 2);

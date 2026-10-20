@@ -476,4 +476,75 @@ export default {
       log(JSON.stringify(r));
     }
   },
+
+  // Run with EXTRA='&menu=1' so the game starts on the title screen.
+  async menus({ page, sleep, shot, log }) {
+    const waitFor = async (fn, ms = 20000) => {
+      const t0 = Date.now();
+      while (Date.now() - t0 < ms) {
+        if (await page.evaluate(fn)) return true;
+        await sleep(250);
+      }
+      return false;
+    };
+    const st = () => page.evaluate(() => ({ state: __game.state, screen: __game.menu.screen, focus: __game.menu.items[__game.menu.index] && __game.menu.items[__game.menu.index].label }));
+    await page.evaluate(() => __game.progress.reset());
+    await sleep(2500);
+    log('title', JSON.stringify(await st()));
+    await shot('title');
+    // Garage: FREE ROAM, MISSIONS, STREET RACES, GARAGE.
+    for (let i = 0; i < 3; i++) { await page.keyboard.press('ArrowDown'); await sleep(150); }
+    await page.keyboard.press('Enter');
+    await waitFor(() => __game.menu.screen === 'garage');
+    await page.evaluate(() => { __game.progress.data.cash = 50000; __game.menu.showGarage('title', 3); });
+    await sleep(2500);
+    log('garage', JSON.stringify(await st()));
+    await shot('garage');
+    await page.keyboard.press('Enter');
+    await sleep(800);
+    log('bought paint', JSON.stringify(await page.evaluate(() => ({ paint: __game.progress.data.paint, cash: __game.progress.cash }))));
+    await page.keyboard.press('Escape');
+    await waitFor(() => __game.menu.screen === 'title');
+    await page.evaluate(() => __game.menu.showSettings('title'));
+    await sleep(1500);
+    await shot('settings');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowRight');
+    await sleep(500);
+    log('quality after right', await page.evaluate(() => __game.settings.get('quality')));
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Escape');
+    await waitFor(() => __game.menu.screen === 'title');
+    await page.evaluate(() => __game.menu.showList('mission', 'title'));
+    await sleep(1500);
+    await shot('missions');
+    await page.keyboard.press('Escape');
+    await waitFor(() => __game.menu.screen === 'title');
+    // Free roam -> intro flyover.
+    await page.evaluate(() => __game.menu.focus(__game.menu.items.findIndex((i) => i.label === 'FREE ROAM')));
+    await page.keyboard.press('Enter');
+    await waitFor(() => __game.state === 'intro');
+    await sleep(2500);
+    log('intro', JSON.stringify(await st()));
+    await shot('intro');
+    await page.keyboard.press('Enter');
+    await waitFor(() => __game.state === 'playing', 60000);
+    log('playing', JSON.stringify(await st()));
+    await sleep(1500);
+    await page.keyboard.press('Escape');
+    await waitFor(() => __game.state === 'paused');
+    await sleep(1200);
+    log('paused', JSON.stringify(await st()));
+    await shot('pause');
+    await page.keyboard.press('Escape');
+    await waitFor(() => __game.state === 'playing');
+    log('resumed', JSON.stringify(await st()));
+    await sleep(1000);
+    await page.keyboard.press('KeyX');
+    await waitFor(() => __game.xray.on);
+    await page.evaluate(() => { __game.heat.setLevel(2); __game.test.hold(true); __game.test.simulate(8, { handbrake: 1 }); });
+    await sleep(3000);
+    await shot('xray');
+    log('xray', await page.evaluate(() => ({ on: __game.xray.on, ghosts: __game.xray.ghosts.size })));
+  },
 };
