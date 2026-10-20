@@ -1,0 +1,28 @@
+{
+  "name": "rdstr-game",
+  "version": "1.0.0",
+  "description": "3D open-world browser game. Drive an electric roadster through a neon city, outrun the police, pull off stunts and complete missions. RDSTR: a high-speed police chase game built with Three.js. Thrusters, stunts, missions and an open-world city, all playable in your browser. Arcade 3D driving game in the browser.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MRaheel25/rdstr-game.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/MRaheel25/rdstr-game/issues"
+  },
+  "homepage": "https://github.com/MRaheel25/rdstr-game#readme",
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "postprocessing": "^6.39.5",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.1"
+  }
+}

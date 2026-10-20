@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RDSTR // Cold Gas Pursuit</title>
+  <meta name="description" content="RDSTR: a high-speed 3D police pursuit game in the browser. Drive an electric roadster with cold-gas thrusters through the neon city of Halcyon Bay." />
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/three.module.js",
+      "three/addons/": "./vendor/three/addons/",
+      "postprocessing": "./vendor/postprocessing/postprocessing.js",
+      "@dimforge/rapier3d-compat": "./vendor/rapier/rapier.mjs"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="radio" class="radio"></div>
+    <div id="top-center">
+      <div id="objective" class="hidden"><div class="obj-text"></div><div class="obj-timer"></div></div>
+      <div id="style-score" class="hidden"><div class="score-total">0</div><div class="score-chain"><span class="chain-pts"></span><span class="chain-mult"></span></div></div>
+    </div>
+    <div id="popups"></div>
+    <div id="hp-bar"><div class="hp-fill"></div><div class="hp-label">CHASSIS</div></div>
+    <div id="bottom-left">
+      <div id="heat"><div class="stars"></div><div class="evade"><div class="evade-fill"></div><span class="evade-label"></span></div></div>
+      <canvas id="minimap" width="220" height="220"></canvas>
+    </div>
+    <div id="bottom-right">
+      <canvas id="gauge" width="300" height="300"></canvas>
+      <div id="speed-readout"><div class="speed">0</div><div class="unit">MPH</div></div>
+      <div id="mode-indicator">TRACK</div>
+      <div id="energy-readout"><span class="batt">100%</span><span class="temp">32°C</span><span class="copv">COPV 100%</span></div>
+    </div>
+    <div id="warnings"></div>
+    <div id="prompt" class="hidden"></div>
+    <div id="hints" class="hidden"></div>
+    <div id="crack-overlay"></div>
+  </div>
+
+  <div id="debug" class="hidden"></div>
+  <div id="loading"><div class="load-title">RDSTR</div><div class="load-sub">COLD GAS PURSUIT</div><div class="load-bar"><div class="load-fill"></div></div><div class="load-msg">Initializing…</div></div>
+  <div id="ui-root"></div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
