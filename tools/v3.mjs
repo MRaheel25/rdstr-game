@@ -74,4 +74,38 @@ export default {
     await sleep(600);
     await shot('sound');
   },
+  // M3: bright showroom, player card, part click + hover outline, cards, night studio, sizes.
+  async m3({ page, sleep, shot, log }) {
+    await sleep(3500);
+    await shot('title');
+    // Hover + click the near door: project the car's side to the screen.
+    const pt = [[900, 405], [900, 345], [1140, 400], [700, 385]];
+    let part = null;
+    for (const [x, y] of pt) {
+      await page.mouse.move(x, y);
+      await sleep(300);
+      part = await page.evaluate(() => __game.menu.garage.hoverPart);
+      if (part) {
+        await shot('hover_' + part);
+        await page.mouse.click(x, y);
+        await sleep(1500);
+        log('clicked', part, await page.evaluate(() => JSON.stringify({ doors: __game.playerVisual.state.doorTarget, hot: __game.menu.garage.hot })));
+        break;
+      }
+    }
+    log('parts at test points', await page.evaluate((pt) => pt.map(([x, y]) => __game.menu.garage.pick(x, y)).join(','), pt));
+    await page.mouse.move(5, 5);
+    await page.evaluate(() => __game.menu.showPlay());
+    await sleep(1500);
+    await shot('modes');
+    await page.evaluate(() => { __game.settings.set('studioNight', true); __game.menu.garage.setLook('night'); __game.menu.showTitle(); });
+    await sleep(1500);
+    await shot('night');
+    await page.evaluate(() => { __game.settings.set('studioNight', false); __game.menu.garage.setLook('light'); __game.menu.showTitle(); });
+    for (const [w, h] of [[1920, 1080], [2560, 1080], [390, 844]]) {
+      await page.setViewportSize({ width: w, height: h });
+      await sleep(1500);
+      await shot(`size_${w}x${h}`);
+    }
+  },
 };

@@ -12,6 +12,21 @@ import { DISTRICTS } from '../world/Layout.js';
 import { MUSIC_STYLES } from '../audio/Music.js';
 import { TODS, WEATHERS, makePreset } from '../world/Environment.js';
 
+// V3 menu icons (stroke style, 24 px grid).
+const svg = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const ICONS = {
+  continue: svg('<path d="M5 12h12M13 7l5 5-5 5"/>'),
+  play: svg('<path d="M8 5l11 7-11 7z"/>'),
+  garage: svg('<path d="M3 11l9-6 9 6v9H3z"/><path d="M7 20v-6h10v6"/>'),
+  name: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/>'),
+  settings: svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>'),
+  info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>'),
+  saves: svg('<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h8V3M8 21v-7h8v7"/>'),
+  exit: svg('<path d="M10 4H4v16h6M15 8l4 4-4 4M19 12H9"/>'),
+  cash: svg('<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>'),
+  rep: svg('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>'),
+  jobs: svg('<path d="M4 12l5 5L20 6"/>'),
+};
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const TYPE = { getaway: 'GETAWAY', datarun: 'DATA RUN', bounty: 'BOUNTY', skygap: 'SKY GAP', ghost: 'GHOST PROTOCOL' };
 const DISTRICT_BLURB = {
@@ -222,7 +237,10 @@ export class Menu {
   // ---- rendering -------------------------------------------------------------------------------
   // items: { type: 'button'|'slider'|'select'|'bind'|'header', label, sub, action, get, set, options, disabled }
   render(html, items, { focus = 0, cls = '', horizontal = false } = {}) {
-    this.root.className = `menu ${cls}`;
+    // Light theme over the bright studio; dark glass over the game / Night Studio.
+    const light = this.garage.active && this.garage.look === 'light' && !cls.includes('over-game');
+    this.root.className = `menu ${cls} ${light ? 'light' : 'dark'} enter`;
+    requestAnimationFrame(() => this.root.classList.remove('enter'));
     this.horizontal = horizontal;
     this.capturing = false;
     // Buttons held while a screen opens must be released before they act again.
@@ -277,7 +295,7 @@ export class Menu {
 
   refresh(it) {
     const el = it.el;
-    const label = `${it.num ? `<span class="mi-num">${it.num}</span>` : ''}<span class="mi-label">${esc(it.label)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>`;
+    const label = `${it.icon ? `<span class="mi-icon">${ICONS[it.icon] || ''}</span>` : it.num ? `<span class="mi-num">${it.num}</span>` : ''}<span class="mi-label">${esc(it.label)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>`;
     if (it.type === 'slider') {
       const v = Math.round(it.get() * 100);
       if (!el.querySelector('input')) el.innerHTML = `${label}<span class="mi-value"><input type="range" min="0" max="100" step="1"><b></b></span>`;
@@ -307,7 +325,11 @@ export class Menu {
     const g = this.game;
     this.garage.setMode(mode);
     if (!this.garage.active) {
+      this.garage.setLook(g.settings.get('studioNight') ? 'night' : 'light');
+      this.garage.onHover = (part, meshes) => g.gfx.setOutline(this.garage.scene, meshes);
+      this.garage.onPart = () => this.sound('click');
       this.garage.enter(g.playerVisual);
+      g.gfx.setStudio(true);
       g.gfx.renderPass.scene = this.garage.scene;
       for (const k in g.gfx.fx) g.gfx.fx[k] = 0;
       g.hud.show(false);
@@ -318,6 +340,8 @@ export class Menu {
   leaveShowroom() {
     const g = this.game;
     if (this.garage.active) {
+      g.gfx.setOutline(this.garage.scene, []);
+      g.gfx.setStudio(false);
       this.garage.exit();
       g.gfx.renderPass.scene = g.scene;
     }
@@ -330,7 +354,6 @@ export class Menu {
       this.garage.update(realDt, this.game.camera);
       // Keep the borrowed model's lights / wheels animating at rest.
       this.game.playerVisual.update(realDt, this.game.player);
-      if (this.screen === 'title') this.updateHotspots();
     }
   }
 
@@ -342,7 +365,24 @@ export class Menu {
   }
 
   logoHtml() {
-    return `<div class="logo-wrap"><div class="title-logo" data-text="RDSTR">RDSTR<i class="sweep"></i></div><div class="title-sub">// COLD GAS PURSUIT</div></div>`;
+    return `<div class="logo-wrap"><div class="title-logo">RDSTR<i class="sweep"></i></div><div class="title-sub">COLD GAS PURSUIT</div></div>`;
+  }
+
+  // V3 player card: level badge, name, XP progress, big stat numbers with icons.
+  playerCard() {
+    const p = this.game.progress;
+    const L = p.level;
+    const lo = 60 * (L - 1) ** 2;
+    const hi = 60 * L ** 2;
+    const xp = Math.max(0, Math.min(1, (p.rep - lo) / (hi - lo)));
+    const done = Object.values(p.data.missions).filter((m) => m.done).length;
+    const stat = (icon, val, label) => `<div class="pc-stat">${ICONS[icon]}<b>${val}</b><span>${label}</span></div>`;
+    return `<div class="player-card">
+      <div class="pc-top"><div class="pc-badge"><span>LV</span><b>${L}</b></div>
+        <div class="pc-id"><span>DRIVER</span><b>${esc(p.playerName)}</b>
+          <div class="pc-xp"><i style="width:${(xp * 100).toFixed(1)}%"></i></div><small>${(p.rep - lo).toLocaleString()} / ${(hi - lo).toLocaleString()} XP TO LEVEL ${L + 1}</small></div></div>
+      <div class="pc-stats">${stat('cash', `$${p.cash.toLocaleString()}`, 'CASH')}${stat('rep', p.rep.toLocaleString(), 'REP')}${stat('jobs', `${done}/10`, 'JOBS')}</div>
+    </div>`;
   }
 
   showTitle(focus = 0) {
@@ -362,79 +402,17 @@ export class Menu {
       { label: 'SAVE GAMES', sub: '3 slots', action: () => this.showSaves('title') },
       { label: 'EXIT', action: () => this.showExit(), cls: 'exit' },
     );
-    items.forEach((it, i) => (it.num = String(i + 1).padStart(2, '0')));
+    const ICON_FOR = { CONTINUE: 'continue', PLAY: 'play', GARAGE: 'garage', 'PLAYER NAME': 'name', SETTINGS: 'settings', 'GAME INFO': 'info', 'SAVE GAMES': 'saves', EXIT: 'exit' };
+    items.forEach((it) => (it.icon = ICON_FOR[it.label]));
     if (typeof focus === 'string') focus = Math.max(0, items.findIndex((it) => it.label === focus));
     this.render(`
       <div class="title-col">
         ${this.logoHtml()}
-        <div class="player-tag"><span>DRIVER</span><b>${esc(p.playerName)}</b></div>
+        ${this.playerCard()}
         <div class="menu-list"></div>
-        ${this.careerLine()}
-        <div class="menu-foot">↑↓ SELECT · ENTER CONFIRM · DRAG CAR TO ROTATE · SCROLL TO ZOOM</div>
-      </div>
-      <div class="hotspots">
-        <button data-hot="doors"><i></i><span>DOORS</span></button>
-        <button data-hot="roof"><i></i><span>ROOF</span></button>
-        <button data-hot="lights"><i></i><span>LIGHTS</span></button>
-        <button data-hot="thrusters"><i></i><span>THRUSTERS</span></button>
+        <div class="menu-foot">DRAG TO ROTATE · SCROLL TO ZOOM · CLICK A DOOR, THE ROOF, THE REAR OR THE LIGHTS</div>
       </div>`, items, { cls: 'title-screen', focus });
-    this.bindHotspots();
     this.onBack = null;
-  }
-
-  bindHotspots() {
-    for (const b of this.root.querySelectorAll('.hotspots button')) {
-      b.addEventListener('pointerdown', (e) => e.stopPropagation());
-      b.addEventListener('click', () => {
-        this.garage.toggle(b.dataset.hot);
-        this.sound('click');
-        this.syncHotspots();
-      });
-    }
-    this.syncHotspots();
-  }
-
-  syncHotspots() {
-    const h = this.garage.hot || {};
-    const m = this.game.playerVisual;
-    for (const b of this.root.querySelectorAll('.hotspots button')) {
-      const k = b.dataset.hot;
-      const on = k === 'doors' ? m.state.doorTarget > 0.5 : !!h[k];
-      b.classList.toggle('on', on);
-    }
-  }
-
-  // Hotspot anchors in car-local space (front is -z) and their outward normals.
-  updateHotspots() {
-    const el = this.root.querySelector('.hotspots');
-    if (!el || !this.garage.active) return;
-    const cam = this.game.camera;
-    const root = this.game.playerVisual.root;
-    const W = window.innerWidth;
-    const H = window.innerHeight;
-    const anchors = {
-      doors: [[0.95, 0.3, -0.1], [1, 0, 0]], roof: [[0, 0.72, 0.2], [0, 1, 0]],
-      lights: [[0.62, 0.14, -2.0], [0.3, 0, -1]], thrusters: [[0, 0.15, 2.2], [0, 0, 1]],
-    };
-    const p = this._hp || (this._hp = new THREE.Vector3());
-    const n = this._hn || (this._hn = new THREE.Vector3());
-    const toCam = this._hc || (this._hc = new THREE.Vector3());
-    for (const b of el.children) {
-      const [pos, nrm] = anchors[b.dataset.hot];
-      p.set(...pos).applyMatrix4(root.matrixWorld);
-      n.set(...nrm).transformDirection(root.matrixWorld);
-      toCam.copy(cam.position).sub(p).normalize();
-      const facing = n.dot(toCam);
-      // Mirror side hotspots to the visible side.
-      if (b.dataset.hot === 'doors' && facing < 0) {
-        p.set(-pos[0], pos[1], pos[2]).applyMatrix4(root.matrixWorld);
-      }
-      const vis = b.dataset.hot === 'doors' ? 1 : clamp((facing + 0.15) * 3, 0, 1);
-      p.project(cam);
-      b.style.transform = `translate(${((p.x + 1) / 2) * W}px, ${((1 - p.y) / 2) * H}px)`;
-      b.style.opacity = vis.toFixed(2);
-      b.style.pointerEvents = vis > 0.3 ? 'auto' : 'none';
-    }
   }
 
   nextJobText() {
@@ -469,8 +447,20 @@ export class Menu {
       taxi: () => (this.game.startTaxi ? this.game.startTaxi() : this.game.startPlay({})),
       kids: () => this.game.startPlay({ district: 'downtown', tod: 'noon', weather: 'clear', mode: 'kids' }),
     };
+    // Real stills from the city for each mode (rendered once, cached).
+    const SPOT = { free: 'downtown', race: 'highway', heist: 'harbor', career: 'construction', taxi: 'waterfront', kids: 'canyon' };
+    this.modePreviews = this.modePreviews || {};
+    for (const m of modes) {
+      if (this.modePreviews[m.id] === undefined) {
+        try {
+          this.modePreviews[m.id] = g.renderPreview(g.world.districtStart(SPOT[m.id]), 480, 300);
+        } catch (e) {
+          this.modePreviews[m.id] = null;
+        }
+      }
+    }
     const items = modes.map((m) => ({
-      label: m.label, sub: m.sub, cls: `card mode-${m.id}`,
+      label: m.label, sub: m.sub, cls: `card big mode-${m.id}`, img: this.modePreviews[m.id],
       action: () => {
         this.playSetup = { mode: m.id };
         if (MODE_ACTION[m.id]) MODE_ACTION[m.id]();
@@ -910,6 +900,7 @@ export class Menu {
         { type: 'select', label: 'Quality', options: QUALITY_ORDER.map((q) => [q, QUALITY_PRESETS[q].label]), get: () => s.get('quality'), set: (v) => { s.set('quality', v); g.applyQuality(); } },
         { type: 'select', label: 'Resolution scale', options: [[0.5, '50%'], [0.67, '67%'], [0.75, '75%'], [0.85, '85%'], [1, '100%']], get: () => s.get('resScale') ?? 1, set: (v) => { s.set('resScale', v); g.applyQuality(); } },
         { type: 'select', label: 'Auto quality', sub: 'Drop a level if FPS stays below 45', options: onOff, get: () => s.get('autoQuality'), set: set('autoQuality') },
+        { type: 'select', label: 'Showroom', sub: 'Bright photo studio or a darker Night Studio', options: [[false, 'Light Studio'], [true, 'Night Studio']], get: () => !!s.get('studioNight'), set: (v) => { s.set('studioNight', v); this.garage.setLook(v ? 'night' : 'light'); } },
         { type: 'select', label: 'Time of day', options: Object.keys(TODS).map((k) => [k, TODS[k].label]), get: () => s.get('tod') || 'noon', set: (v) => g.setConditions(v, s.get('weather') || 'clear') },
         { type: 'select', label: 'Weather', options: Object.keys(WEATHERS).map((k) => [k, WEATHERS[k].label]), get: () => s.get('weather') || 'clear', set: (v) => g.setConditions(s.get('tod') || 'noon', v) },
       ];

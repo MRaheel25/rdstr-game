@@ -48,7 +48,7 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 UPDATE_V3.md replaces UPDATE_V2.md Part 2. Smoke tests: `SCEN=./v3.mjs EXTRA='&menu=1' node tools/smoke.mjs m<N> screenshots/v3m<N>`.
 - [x] **V3 M1 — Unlock everything, map and navigation** (see "V3 M1 results")
 - [x] **V3 M2 — Sound fix and music options** (see "V3 M2 results")
-- [ ] V3 M3 — Main menu first impression
+- [x] **V3 M3 — Main menu first impression** (see "V3 M3 results")
 - [ ] V3 M4 — In-game HUD
 - [ ] V3 M5 — Thruster control and safe landings
 - [ ] V3 M6 — Realistic crashes and destruction
@@ -56,7 +56,28 @@ UPDATE_V3.md replaces UPDATE_V2.md Part 2. Smoke tests: `SCEN=./v3.mjs EXTRA='&m
 - [ ] V3 M8 — Taxi mode
 - [ ] V3 M9 — Kids, Heist, Career, saves, garage
 - [ ] V3 M10 — Polish
-- **Next:** V3 M3 (main menu).
+- **Next:** V3 M4 (in-game HUD).
+
+## V3 M3 results
+- Fonts bundled locally: Rajdhani 500/600/700 (display) and Inter 400/500/600/800 (UI) in `vendor/fonts` (from
+  @fontsource, licences included), loaded with @font-face. Zero external requests.
+- `ui/GarageScene.js` rebuilt as a bright photo studio: a 360° lathed infinity cove (floor curving into the wall), three
+  large RectAreaLights overhead (vendored `RectAreaLightUniformsLib`) with visible soft boxes, a slow soft sweep bar
+  gliding over the paint, a soft-shadow key light, a glossy light floor (planar reflection under an 84% coat with a
+  radial fade) and an elliptical contact shadow under the car; a white soft-box PMREM for reflections. Neon poles,
+  haze beams, glowing rims and all flicker / glitch effects removed. Settings > Graphics > Showroom: Light Studio
+  (default) or Night Studio (dark cove, dim floor, cool / warm rim lights). In the showroom the renderer switches to a
+  neutral grade, gentle bloom and a light vignette (`Renderer.setStudio`).
+- Car viewer: drag to rotate with inertia, smooth wheel / pinch zoom with limits, right-drag (or Shift-drag) and
+  two-finger pan; no hotspot dots. Clicking a door / the roof / the rear / the headlights toggles doors, roof panel,
+  thruster reveal, lights (`GarageScene.pick` / `partOf`); hovering a part draws a soft blue outline (postprocessing
+  `OutlineEffect`, created on first use).
+- Menu: light theme over the light studio (frosted white glass, dark text), dark glass over the game / Night Studio;
+  Rajdhani headings, icon per item, focus = slide + accent bar + raised plate, subtitles expand on focus, eased fade /
+  slide-in of every screen. Player card: level badge, name, XP bar to the next level, large cash / rep / jobs numbers
+  with icons. Mode cards are big image cards with real stills rendered from the city, hover zoom and accent ring.
+  Responsive rules for <=1100 px, short screens, ultrawide (>=2200 px) and phones (two-column menu at the bottom).
+  Checked at 1280x720, 1920x1080, 2560x1080 and 390x844.
 
 ## V3 M2 results
 - Motor (`audio/CarAudio.js`) rebuilt: sine fundamental + soft triangle 2nd + faint sine 3rd harmonic through a low-pass
