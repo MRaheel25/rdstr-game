@@ -189,8 +189,9 @@ export class Progress {
     this.save();
   }
 
+  // V3: every district is open from the start (rep still unlocks paint and upgrades).
   districtOpen(id) {
-    return this.data.districts.includes(id);
+    return true;
   }
 
   recordMission(id, stars, best) {

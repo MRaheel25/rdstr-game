@@ -85,18 +85,20 @@ export class AudioEngine {
     const m = clamp(s.get('masterVolume') ?? 0.8, 0, 1);
     const mu = clamp(s.get('musicVolume') ?? 0.55, 0, 1);
     const sf = clamp(s.get('sfxVolume') ?? 0.9, 0, 1);
+    const ui = clamp(s.get('uiVolume') ?? 0.7, 0, 1);
+    const musicOn = s.get('musicOn') !== false;
     const v = this.volumes;
     const t = this.now;
     // Perceptual (squared) curves on the sliders.
     if (m !== v.master) this.master.gain.setTargetAtTime(m * m * 0.9, t, 0.05);
-    if (mu !== v.music) this.music.gain.setTargetAtTime(mu * mu * 1.15, t, 0.05);
-    if (sf !== v.sfx) {
-      this.sfx.gain.setTargetAtTime(sf * sf, t, 0.05);
-      this.ui.gain.setTargetAtTime(sf * sf * 0.7, t, 0.05);
-    }
+    const muEff = musicOn ? mu : 0;
+    if (muEff !== v.music) this.music.gain.setTargetAtTime(muEff * muEff * 1.15, t, 0.05);
+    if (sf !== v.sfx) this.sfx.gain.setTargetAtTime(sf * sf, t, 0.05);
+    if (ui !== v.ui) this.ui.gain.setTargetAtTime(ui * ui * 0.8, t, 0.05);
     v.master = m;
-    v.music = mu;
+    v.music = muEff;
     v.sfx = sf;
+    v.ui = ui;
   }
 
   // 0 = clear, 1 = heavily muffled (Ghost Mode / Cold Snap / underwater).

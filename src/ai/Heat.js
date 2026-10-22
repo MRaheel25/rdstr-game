@@ -34,7 +34,7 @@ export class Heat {
   }
 
   add(points, reason = '') {
-    if (points <= 0) return;
+    if (points <= 0 || this.game.kidsMode || this.game.noPolice) return;
     const before = this.level;
     this.points += points;
     while (this.level < this.maxLevel && this.points >= HEAT_LEVELS[this.level + 1].threshold) this.level++;

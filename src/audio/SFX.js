@@ -110,8 +110,8 @@ export class SFX {
     const e = this.e;
     if (!e.ok || !this.gate('charging', 0.9)) return;
     const o = e.oneShotOut(pos, { ref: 12 });
-    this.tone(o.input, { type: 'sawtooth', f0: 110, f1: 180, peak: 0.06, attack: 0.2, decay: 0.8 });
-    this.tone(o.input, { type: 'sine', f0: 880, f1: 1320, peak: 0.05, attack: 0.1, decay: 0.7 });
+    this.tone(o.input, { type: 'triangle', f0: 110, f1: 165, peak: 0.05, attack: 0.2, decay: 0.8 });
+    this.tone(o.input, { type: 'sine', f0: 330, f1: 440, peak: 0.04, attack: 0.1, decay: 0.7 });
     o.dispose(1.2);
   }
 
@@ -119,8 +119,8 @@ export class SFX {
     const e = this.e;
     if (!e.ok || !this.gate('tools', 0.35)) return;
     const o = e.oneShotOut(pos, { ref: 12, reverb: 0.4 });
-    for (let i = 0; i < 4; i++) this.noiseBurst(o.input, { type: 'bandpass', f0: 2500 + Math.random() * 2500, q: 6, peak: 0.25, decay: 0.04, at: i * 0.07 });
-    if (Math.random() < 0.4) this.tone(o.input, { type: 'square', f0: 220, f1: 180, peak: 0.05, decay: 0.25 });
+    for (let i = 0; i < 4; i++) this.noiseBurst(o.input, { type: 'bandpass', f0: 1500 + Math.random() * 1200, q: 3, peak: 0.16, decay: 0.04, at: i * 0.07 });
+    if (Math.random() < 0.4) this.tone(o.input, { type: 'triangle', f0: 220, f1: 180, peak: 0.04, decay: 0.25 });
     o.dispose(0.8);
   }
 
@@ -128,8 +128,8 @@ export class SFX {
     const e = this.e;
     if (!e.ok) return;
     const o = e.oneShotOut(null, {});
-    this.tone(o.input, { f0: 660, peak: 0.12, decay: 0.25 });
-    this.tone(o.input, { f0: 990, peak: 0.12, decay: 0.4, at: 0.12 });
+    this.tone(o.input, { f0: 523, peak: 0.08, attack: 0.01, decay: 0.25 });
+    this.tone(o.input, { f0: 784, peak: 0.08, attack: 0.01, decay: 0.4, at: 0.12 });
     o.dispose(1);
   }
 
@@ -168,9 +168,9 @@ export class SFX {
     const e = this.e;
     if (!e.ok || !this.gate('emp', 0.5)) return;
     const o = e.oneShotOut(null, { reverb: 0.5 });
-    this.tone(o.input, { type: 'sawtooth', f0: 2200, f1: 50, peak: 0.25, attack: 0.005, decay: 0.9 });
-    this.tone(o.input, { type: 'square', f0: 90, f1: 40, peak: 0.12, decay: 0.8 });
-    for (let i = 0; i < 12; i++) this.noiseBurst(o.input, { type: 'highpass', f0: 3000, peak: 0.12, attack: 0.001, decay: 0.03, at: Math.random() * 0.8 });
+    this.tone(o.input, { type: 'triangle', f0: 900, f1: 50, peak: 0.18, attack: 0.01, decay: 0.9 });
+    this.tone(o.input, { type: 'sine', f0: 90, f1: 40, peak: 0.16, decay: 0.8 });
+    for (let i = 0; i < 10; i++) this.noiseBurst(o.input, { type: 'bandpass', f0: 1600, q: 1, peak: 0.08, attack: 0.002, decay: 0.03, at: Math.random() * 0.8 });
     o.dispose(1.5);
   }
 
@@ -225,8 +225,8 @@ export class SFX {
     if (!e.ok) return;
     const o = e.oneShotOut(null, { bus: e.ui, reverb: 0.8 });
     this.noiseBurst(o.input, { kind: 'pink', type: 'bandpass', f0: 6000, f1: 800, q: 0.8, peak: 0.4, attack: 0.25, decay: 0.6 });
-    const notes = [1318, 1760, 1975, 2637, 3520];
-    notes.forEach((f, i) => this.tone(o.input, { f0: f, peak: 0.06, attack: 0.01, decay: 1.4, at: i * 0.06 }));
+    const notes = [659, 880, 988, 1318];
+    notes.forEach((f, i) => this.tone(o.input, { f0: f, peak: 0.04, attack: 0.02, decay: 1.2, at: i * 0.06 }));
     this.tone(o.input, { f0: 60, f1: 30, peak: 0.3, attack: 0.1, decay: 1.2 });
     o.dispose(2.5);
   }
@@ -238,7 +238,7 @@ export class SFX {
     this.tone(o.input, { f0: 55, f1: 22, peak: 0.9, attack: 0.005, decay: 1.2 });
     this.noiseBurst(o.input, { kind: 'brown', type: 'lowpass', f0: 1500, f1: 80, peak: 0.9, decay: 1.2 });
     this.noiseBurst(o.input, { type: 'highpass', f0: 5000, peak: 0.3, attack: 0.02, decay: 1.4 });
-    for (let i = 0; i < 14; i++) this.tone(o.input, { f0: 3000 + Math.random() * 4000, peak: 0.03, decay: 0.3, at: Math.random() * 0.8 });
+    for (let i = 0; i < 10; i++) this.tone(o.input, { f0: 1200 + Math.random() * 1200, peak: 0.015, attack: 0.01, decay: 0.3, at: Math.random() * 0.8 });
     o.dispose(2.5);
   }
 
@@ -256,8 +256,8 @@ export class SFX {
     if (!e.ok || !this.gate('air', 1)) return;
     const o = e.oneShotOut(pos, { ref: 8 });
     this.noiseBurst(o.input, { type: 'highpass', f0: 2500, q: 0.7, peak: 0.4, attack: 0.05, decay: 1.2 });
-    this.tone(o.input, { f0: 880, peak: 0.08, decay: 0.15, at: 1.1 });
-    this.tone(o.input, { f0: 1320, peak: 0.08, decay: 0.3, at: 1.25 });
+    this.tone(o.input, { f0: 523, peak: 0.06, attack: 0.01, decay: 0.15, at: 1.1 });
+    this.tone(o.input, { f0: 784, peak: 0.06, attack: 0.01, decay: 0.3, at: 1.25 });
     o.dispose(2);
   }
 
@@ -265,8 +265,8 @@ export class SFX {
     const e = this.e;
     if (!e.ok || !this.gate('radio', 0.4)) return;
     const o = e.oneShotOut(null, { bus: e.ui });
-    this.noiseBurst(o.input, { type: 'bandpass', f0: 2200, q: 2, peak: 0.12, attack: 0.002, decay: 0.12 });
-    this.tone(o.input, { type: 'square', f0: 1400, peak: 0.03, decay: 0.05, at: 0.12 });
+    this.noiseBurst(o.input, { type: 'bandpass', f0: 1500, q: 1.2, peak: 0.08, attack: 0.003, decay: 0.12 });
+    this.tone(o.input, { type: 'sine', f0: 900, peak: 0.025, attack: 0.003, decay: 0.05, at: 0.12 });
     o.dispose(0.5);
   }
 
@@ -274,7 +274,7 @@ export class SFX {
     const e = this.e;
     if (!e.ok || !this.gate('alert', 0.5)) return;
     const o = e.oneShotOut(null, { bus: e.ui });
-    for (let i = 0; i < 2; i++) this.tone(o.input, { type: 'square', f0: 660 + level * 40, peak: 0.05, decay: 0.12, at: i * 0.16 });
+    for (let i = 0; i < 2; i++) this.tone(o.input, { type: 'sine', f0: 440 + level * 30, peak: 0.06, attack: 0.01, decay: 0.16, at: i * 0.18 });
     o.dispose(0.6);
   }
 
@@ -282,12 +282,18 @@ export class SFX {
     const e = this.e;
     if (!e.ok || !this.gate('ui' + kind, 0.03)) return;
     const o = e.oneShotOut(null, { bus: e.ui });
-    if (kind === 'hover') this.tone(o.input, { f0: 1800, peak: 0.025, decay: 0.04 });
-    else if (kind === 'back') this.tone(o.input, { type: 'triangle', f0: 600, f1: 300, peak: 0.08, decay: 0.12 });
+    // V3: soft, short, premium: low sine ticks with a quick attack, a muted noise tap on hover.
+    if (kind === 'hover') {
+      this.noiseBurst(o.input, { kind: 'pink', type: 'lowpass', f0: 1400, q: 0.5, peak: 0.05, attack: 0.004, decay: 0.05 });
+      this.tone(o.input, { f0: 520, peak: 0.018, attack: 0.004, decay: 0.06 });
+    } else if (kind === 'back') this.tone(o.input, { f0: 420, f1: 300, peak: 0.07, attack: 0.005, decay: 0.12 });
     else if (kind === 'buy') {
-      this.tone(o.input, { type: 'triangle', f0: 880, peak: 0.08, decay: 0.12 });
-      this.tone(o.input, { type: 'triangle', f0: 1320, peak: 0.08, decay: 0.25, at: 0.09 });
-    } else this.tone(o.input, { type: 'triangle', f0: 1200, f1: 900, peak: 0.07, decay: 0.08 });
+      this.tone(o.input, { f0: 523, peak: 0.07, attack: 0.006, decay: 0.16 });
+      this.tone(o.input, { f0: 784, peak: 0.06, attack: 0.006, decay: 0.3, at: 0.08 });
+    } else {
+      this.tone(o.input, { f0: 660, f1: 520, peak: 0.06, attack: 0.004, decay: 0.08 });
+      this.noiseBurst(o.input, { kind: 'pink', type: 'lowpass', f0: 2000, q: 0.5, peak: 0.04, attack: 0.002, decay: 0.04 });
+    }
     o.dispose(0.5);
   }
 
@@ -296,8 +302,8 @@ export class SFX {
     const e = this.e;
     if (!e.ok || !this.gate('pop', 0.05)) return;
     const o = e.oneShotOut(null, { bus: e.ui, reverb: big ? 0.3 : 0 });
-    this.tone(o.input, { type: 'triangle', f0: big ? 988 : 1320, peak: big ? 0.09 : 0.05, decay: 0.12 });
-    if (big) this.tone(o.input, { type: 'triangle', f0: 1480, peak: 0.08, decay: 0.3, at: 0.07 });
+    this.tone(o.input, { f0: big ? 660 : 880, peak: big ? 0.08 : 0.045, attack: 0.005, decay: 0.12 });
+    if (big) this.tone(o.input, { f0: 990, peak: 0.07, attack: 0.005, decay: 0.3, at: 0.07 });
     o.dispose(0.6);
   }
 
@@ -313,7 +319,7 @@ export class SFX {
       checkpoint: [[660, 990]],
       win: [[262, 330, 392], [294, 370, 440], [330, 415, 494, 659]],
     }[kind] || [[440]];
-    chords.forEach((ch, i) => ch.forEach((f) => this.tone(o.input, { type: 'sawtooth', f0: f, peak: 0.05, attack: 0.02, decay: 0.7, at: i * 0.22 })));
+    chords.forEach((ch, i) => ch.forEach((f) => this.tone(o.input, { type: 'triangle', f0: f, peak: 0.06, attack: 0.02, decay: 0.7, at: i * 0.22 })));
     o.dispose(chords.length * 0.22 + 1);
   }
 }

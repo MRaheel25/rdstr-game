@@ -37,6 +37,10 @@ import { ActivityManager } from '../game/Activities.js';
 import { Menu } from '../ui/Menu.js';
 import { XRay } from '../fx/XRay.js';
 import { Services } from '../game/Services.js';
+import { Navigation } from '../game/Navigation.js';
+import { Taxi } from '../game/Taxi.js';
+import { Destruction, dentModel } from '../fx/Destruction.js';
+import { MapView } from '../ui/MapView.js';
 import { Pedestrians } from '../world/Pedestrians.js';
 
 const _v = new THREE.Vector3();
@@ -112,9 +116,11 @@ export class Game {
     this.photo = new PhotoMode(this);
     this.player.onLaunch = () => this.onLaunch();
     this.player.onHop = () => this.vfx.dustBurst(this.player.position.clone().setY(this.player.position.y - 0.5), 14, 7);
+    this.destruction = new Destruction(this);
     this.playerVisual.onPartLost = (name, mesh) => {
       const p = mesh.getWorldPosition(new THREE.Vector3());
-      this.vfx.spawnDebris(p, this.player.velocity, 'carbon', 3);
+      this.destruction.detach(mesh, this.player, { kick: name.startsWith('wheel') ? 1.6 : 1 });
+      this.vfx.spawnDebris(p, this.player.velocity, 'carbon', 2);
     };
     this.water = { submerged: 0, splashed: false };
     this.takedownCam = { cooldown: 0 };
@@ -137,6 +143,8 @@ export class Game {
     this.setupPursuitEvents();
     this.audio = new AudioSystem(this);
     this.services = new Services(this);
+    this.nav = new Navigation(this);
+    this.mapView = new MapView(this);
     this.peds = new Pedestrians(this);
     this.world.env.onLightning = (k) => {
       this.gfx.setFlash(0.28 * k, 0xdfe6ff);
@@ -148,6 +156,7 @@ export class Game {
     this.physics.world.step(this.physics.eventQueue);
     this.score = new StyleScore(this);
     this.activities = new ActivityManager(this, this.progress, this.score);
+    this.taxi = new Taxi(this);
     this.inputLock = false;
     this.menu = new Menu(this);
     this.xray = new XRay(this);
@@ -231,7 +240,7 @@ export class Game {
     this.activities.update(realDt);
     this.score.update(realDt);
     this.xray.update(realDt);
-    if (this.frame % 2 === 0) this.minimap.update(this.player, this.police, this.heat, this.world.gen.airStations);
+    if (this.frame % 2 === 0) this.minimap.update(this.player, this.police, this.heat, this.world.gen.airStations, this.nav);
     this.banner.update(realDt);
     this.updateHints(realDt);
     this.updateFx(realDt);
@@ -266,6 +275,8 @@ export class Game {
     }
     if (this.state !== 'playing') return;
     if (i.pressed('xray')) this.xray.toggle();
+    if (i.pressed('map') && (this.state === 'playing' || this.mapView.open)) this.mapView.toggle();
+    if (this.player.wrecked && this.player.hp <= 0 && (i.pressed('reset') || this.input.keyPressed?.('Enter'))) this.finishWreck();
     if (i.pressed('help')) {
       this.showHints = !this.showHints;
       this.hintsTimer = this.showHints ? 1e9 : 0;
@@ -291,6 +302,7 @@ export class Game {
     c.yaw = a.yaw;
     c.roll = a.roll;
     this.flightAssist(realDt);
+    if (this.player.speedCap && this.player.speed > this.player.speedCap) c.throttle = 0;
     const e = this.player.energy;
     e.ghost = i.down('ghost') && e.battery > 0.5;
     if (this.inputLock) {
@@ -413,10 +425,20 @@ export class Game {
   onPlayerImpact(v, info) {
     const s = info.strength;
     let dmg = Math.max(0, s - 5) * 1.25;
+    // V3: in Assisted Flight a landing on the wheels never does heavy damage.
+    const landing = info.normal && Math.abs(info.normal.y) > 0.7 && v.up.y > 0.7 && v.lastAirTime > 0.3 && v.time - (v.landTime || -9) < 0.6;
+    if (v.flightAssist && landing) dmg = Math.min(dmg, 2);
     if (info.other && info.other.kind === 'vehicle') dmg *= 0.6;
     if (info.roof) dmg += 12;
     v.damage(dmg);
     // Dent the body panel nearest the contact point.
+    // V3: damage per zone for the HUD car silhouette (front is local -z).
+    if (dmg > 0 && info.point) {
+      const lp = this.playerVisual.root.worldToLocal(info.point.clone());
+      const zone = Math.abs(lp.z) > 1.2 ? (lp.z < 0 ? 'front' : 'rear') : lp.x < 0 ? 'left' : 'right';
+      const zd = v.zoneDamage || (v.zoneDamage = { front: 0, rear: 0, left: 0, right: 0 });
+      zd[zone] = Math.min(1, zd[zone] + dmg / (v.maxHp * 0.45));
+    }
     if (s > 6 && this.playerVisual.dent) {
       const local = this.playerVisual.root.worldToLocal(info.point.clone());
       this.playerVisual.dent(local, clamp(s / 12, 0.3, 3));
@@ -429,6 +451,23 @@ export class Game {
     if (s > 10) this.vfx.spawnDebris(info.point, v.velocity, s > 25 ? 'paint' : 'metal', Math.min(6, Math.floor(s / 8)));
     if (s > 18) this.vfx.glassBurst(info.point, v.velocity, s);
     if (s > 14) this.hitStop = Math.max(this.hitStop, 0.06);
+    // V3: the other car dents too (lighter).
+    const o = info.other;
+    if (o && o.ref && s > 7) {
+      const m = o.ref.model || (this.npcs.find((n) => n.vehicle === o.ref) || {}).model;
+      if (m) dentModel(m.body || m.root, info.point, (s / 14) * 0.7);
+    }
+    // Big side hits roll the car over.
+    if (s > 13 && !landing && Math.abs(info.normal.y) < 0.45) {
+      const side = info.normal.dot(v.right);
+      if (Math.abs(side) > 0.5) {
+        const k = clamp((s - 13) / 12, 0, 1) * (v.cfg.inertia ? v.cfg.inertia[2] : v.mass) * 5.5;
+        v.body.applyTorqueImpulse({ x: v.forward.x * k * -Math.sign(side), y: 0, z: v.forward.z * k * -Math.sign(side) }, true);
+        v.body.applyImpulse({ x: 0, y: v.mass * clamp(s / 25, 0.3, 1.2), z: 0 }, true);
+      }
+    }
+    // Heavy impacts: short slow motion from a dramatic angle (at most once every 6 s).
+    if (s > 17 && !landing && !this.activities.active) this.startTakedownCam(v);
     if (s > 22) {
       this.vfx.screenCrack(clamp(s / 40, 0.4, 1));
       this.gfx.setFlash(0.25, 0xffffff);
@@ -464,6 +503,9 @@ export class Game {
     this.updateWater(realDt);
     this.updateAirStations();
     this.services.update(realDt);
+    this.destruction.update(dt);
+    this.nav.update(realDt);
+    this.taxi.update(realDt);
     this.updateLandingPreview();
     this.peds.update(dt, realDt);
     this.pursuitActive = this.heat.phase !== 'none';
@@ -547,9 +589,44 @@ export class Game {
     this.slowmo.scale = 0.3;
     this.slowmo.timer = 1.8;
     this.cameraCtl.addShake(1);
-    this.banner.show('PURSUIT TERMINATED', 'Chassis destroyed', 'busted', 4);
+    // Crumple the body: dents all round and a lower, squashed shell.
+    const vis = this.playerVisual;
+    for (let k = 0; k < 10; k++) vis.dent(new THREE.Vector3((Math.random() - 0.5) * 1.8, 0.4 + Math.random() * 0.6, (Math.random() - 0.5) * 4.2), 2.4);
+    vis.shell.scale.set(0.98, 0.9, 0.97);
+    this.vfx.addEmitter({ type: 'fire', pos: () => p.position, duration: 8, t: 0, alive: () => p.wrecked });
     this.events.emit('gameOver', { reason: 'wrecked' });
-    setTimeout(() => this.respawnAfter('wrecked'), 4200);
+    this.showWrecked(true);
+    this.wreckTimer = setTimeout(() => this.finishWreck(), 7000);
+  }
+
+  // "WRECKED" screen with a quick respawn (R / Enter / button) or auto after 7 s.
+  showWrecked(on) {
+    let el = document.getElementById('wrecked');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'wrecked';
+      el.innerHTML = '<div class="wk-title">WRECKED</div><div class="wk-sub">Chassis destroyed</div><button>RESPAWN <kbd>R</kbd></button>';
+      el.querySelector('button').addEventListener('click', () => this.finishWreck());
+      document.getElementById('hud').appendChild(el);
+    }
+    el.classList.toggle('show', on);
+  }
+
+  finishWreck() {
+    if (!this.player.wrecked || this.wreckDone) return;
+    this.wreckDone = true;
+    clearTimeout(this.wreckTimer);
+    this.showWrecked(false);
+    if (this.activities.active && !this.activities.active.finished) this.respawnAfter('wrecked');
+    else {
+      // Free roam: quick respawn on the nearest road, repair bill instead of a results screen.
+      const fee = Math.min(1500, Math.round(this.progress.cash * 0.05));
+      this.progress.spend(fee);
+      this.activities.pursuit = null;
+      this.restoreAfterGameOver('wrecked');
+      this.banner.show('RESPAWNED', fee ? `Repair bill -$${fee.toLocaleString()}` : 'Back on the road', 'cool', 2);
+    }
+    this.wreckDone = false;
   }
 
   respawnAfter(reason) {
@@ -576,6 +653,7 @@ export class Game {
     p.energy.temp = Math.min(p.energy.temp, 45);
     p.energy.emp = 0;
     this.playerVisual.repair();
+    p.zoneDamage = { front: 0, rear: 0, left: 0, right: 0 };
     this.police.bustedFired = false;
   }
 
@@ -697,8 +775,13 @@ export class Game {
   }
 
   // ---- game flow: title -> (intro flyover) -> play; pause -> quit to title -----------------
-  startPlay({ continueStory = false, activity = null, district = null, tod = null, weather = null } = {}) {
+  startPlay({ continueStory = false, activity = null, district = null, tod = null, weather = null, mode = 'free' } = {}) {
     const m = this.menu;
+    // Kids Mode: daylight, no police, no damage, gentle speed.
+    this.mode = mode;
+    this.kidsMode = mode === 'kids';
+    this.player.noDamage = this.kidsMode;
+    this.player.speedCap = this.kidsMode ? 27 : 0;
     this.services.cancel();
     if (tod || weather) this.setConditions(tod || this.settings.get('tod'), weather || this.settings.get('weather'));
     m.close();
@@ -736,32 +819,36 @@ export class Game {
     const i = this.input;
     const assist = this.settings.get('flightAssist') !== false;
     v.flightAssist = assist;
+    v.energy.reserveOn = assist;
     const air = v.groundedCount === 0 && v.airTime > 0.1;
-    v.airAssist = { on: air, strength: assist ? 1 : 0.12, landing: 0 };
+    const prevLanding = v.airAssist ? v.airAssist.landing : 0;
+    v.airAssist = { on: air, strength: assist ? 1 : 0.12, landing: prevLanding, pitch: 0, autoLand: assist };
     if (!air) {
       this.maneuver = null;
       return;
     }
     if (!assist) return;
-    // One-key moves.
-    if (!this.maneuver) {
-      const k = i.pressed('rollLeft') ? ['roll', -1] : i.pressed('rollRight') ? ['roll', 1] : i.pressed('throttle') ? ['pitch', 1] : i.pressed('brake') ? ['pitch', -1] : null;
-      if (k) this.maneuver = { axis: k[0], dir: k[1], angle: 0, t: 0 };
+    // Q / E: optional barrel roll trick that always finishes level.
+    if (!this.maneuver && (i.pressed('rollLeft') || i.pressed('rollRight'))) {
+      this.maneuver = { axis: 'roll', dir: i.pressed('rollLeft') ? -1 : 1, angle: 0, t: 0 };
     }
+    // W / S: pitch the nose gently (the stabiliser holds that attitude); A / D: turn in the air.
+    v.airAssist.pitch = (i.down('throttle') ? -0.22 : 0) + (i.down('brake') ? 0.22 : 0);
     c.pitch = 0;
     c.roll = 0;
+    c.yaw = this.input.axes.steer;
     const m = this.maneuver;
     if (m) {
-      // Integrate the rotation about the manoeuvre axis (local frame).
       const av = v.body.angvel();
       const w = new THREE.Vector3(av.x, av.y, av.z).applyQuaternion(v.quaternion.clone().invert());
-      m.angle += Math.abs(m.axis === 'roll' ? w.z : w.x) * realDt;
+      m.angle += Math.abs(w.z) * realDt;
       m.t += realDt;
-      if (m.axis === 'roll') c.roll = m.dir;
-      else c.pitch = m.dir;
-      if (m.angle > Math.PI * 2 - 0.7 || m.t > 3) this.maneuver = null;
+      c.roll = m.dir;
+      // Never start / continue a roll that cannot finish before landing.
+      const tl = v.airAssist.landing;
+      if (m.angle > Math.PI * 2 - 0.7 || m.t > 3 || (tl > 0 && tl < 0.9)) this.maneuver = null;
     }
-    v.airAssist.strength = m ? 0 : 1;
+    v.airAssist.strength = this.maneuver ? 0 : 1;
   }
 
   // Landing preview: ballistic path of the car until it hits the ground, with a ring marker
@@ -809,6 +896,7 @@ export class Game {
     }
     if (!hit) {
       mk.visible = false;
+      if (v.airAssist) v.airAssist.landing = 0;
       return;
     }
     mk.visible = true;
@@ -817,6 +905,11 @@ export class Game {
     mk.material.color.set(good ? 0x6cff8f : 0xffb02e);
     mk.scale.setScalar(1 + Math.min(1.5, t * 0.4));
     if (v.airAssist) v.airAssist.landing = t;
+  }
+
+  // V3 Taxi mode from the menu: start downtown, the shift begins after the intro.
+  startTaxi() {
+    this.startPlay({ district: 'downtown', mode: 'taxi' });
   }
 
   // V2: time of day + weather (saved, applied to sky, lights, fog, rain, roads).
@@ -919,11 +1012,13 @@ export class Game {
     if (this.pendingActivity) {
       const a = this.pendingActivity;
       this.pendingActivity = null;
-      if (this.progress.rep >= a.rep && this.progress.districtOpen(a.district)) this.activities.openBriefing(a);
+      this.activities.openBriefing(a);
     }
+    if (this.mode === 'taxi' && this.taxi) this.taxi.startShift();
   }
 
   quitToTitle() {
+    if (this.taxi && this.taxi.active) this.taxi.stop();
     this.activities.quit();
     this.activities.ui.close();
     this.police.clearAll();
@@ -946,6 +1041,12 @@ export class Game {
     fx.rainLens += ((raining && p.speed > 12 ? Math.min(1, p.speed / 60) : 0) - fx.rainLens) * Math.min(1, realDt * 2);
     const hpFrac = p.hp / p.maxHp;
     fx.damage = hpFrac < 0.3 ? (0.25 + 0.25 * Math.sin(this.time * 6)) * (1 - hpFrac / 0.3) : 0;
+    // V3: fire under the hood at very low health.
+    if (hpFrac < 0.15 && !p.wrecked && Math.random() < realDt * 20 * this.vfx.quality()) {
+      const hood = p.position.clone().addScaledVector(p.forward, 1.4).addScaledVector(p.up, 0.5);
+      this.vfx.fire.spawn({ x: hood.x + (Math.random() - 0.5) * 0.6, y: hood.y, z: hood.z + (Math.random() - 0.5) * 0.6, vx: p.velocity.x * 0.7, vy: 1.6 + Math.random() * 1.5, vz: p.velocity.z * 0.7,
+        life: 0.45 + Math.random() * 0.3, size: 0.5, size1: 1.4, color: [1, 0.6, 0.2], color1: [0.5, 0.08, 0.02], alpha: 0.8, drag: 1, gravity: -1 });
+    }
     // V2 visible damage: smoke from under the hood below 50% chassis, darker and thicker lower.
     if (hpFrac < 0.5 && !p.wrecked && Math.random() < realDt * (6 + (0.5 - hpFrac) * 30)) {
       const hood = p.position.clone().addScaledVector(p.forward, 1.3).addScaledVector(p.up, 0.7);

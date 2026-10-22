@@ -3,6 +3,7 @@
 // spike strips, rolling highway blocks, helicopter searchlight, EMP drones, busting,
 // wrecks and takedowns, and real red/blue light spill from the nearest units.
 import * as THREE from 'three';
+import { dentModel } from '../fx/Destruction.js';
 import { Driver } from './Driver.js';
 import { compass } from './Radio.js';
 import { POLICE_CRUISER, POLICE_INTERCEPTOR, SWAT_TRUCK } from '../vehicle/VehicleConfig.js';
@@ -189,6 +190,10 @@ export class PoliceSystem {
   // ---- per frame ----------------------------------------------------------------
   update(dt, realDt) {
     const g = this.game;
+    if (g.kidsMode || g.noPolice) {
+      if (this.units.length) this.clearAll();
+      return;
+    }
     const player = g.player;
     const heat = this.heat;
     const cfg = heat.config;
@@ -540,6 +545,8 @@ export class PoliceSystem {
       v.damage(dmg);
       if (s > 12 && v.position.distanceTo(this.game.player.position) < 60) u.wallCrash = this.game.time;
     }
+    // V3: lighter deformation on police cars.
+    if (s > 9 && v.position.distanceTo(this.game.player.position) < 90) dentModel(u.model.body || u.model.root, info.point, s / 18);
     if (s > 8 && v.position.distanceTo(this.game.player.position) < 120) {
       this.game.vfx.sparksAt(info.point, _v.copy(info.normal).setY(0.4), Math.min(30, s * 1.5), 10);
     }

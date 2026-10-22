@@ -44,7 +44,148 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 | `ui/ActivityUI.js` | Briefing cards, results screen, race HUD, countdown, objective line |
 | `ai/Heat.js`, `ai/PoliceAI.js`, `ai/Radio.js` | Heat 0-5, evade/cooldown loop, busted timer; police units, roadblocks, spikes, heli, drones; dispatch subtitles |
 
-## Version 2 (UPDATE_V2.md) — branch `v2-part1`
+## Version 3 (UPDATE_V3.md) — branch `v3`
+UPDATE_V3.md replaces UPDATE_V2.md Part 2. Smoke tests: `SCEN=./v3.mjs EXTRA='&menu=1' node tools/smoke.mjs m<N> screenshots/v3m<N>`.
+- [x] **V3 M1 — Unlock everything, map and navigation** (see "V3 M1 results")
+- [x] **V3 M2 — Sound fix and music options** (see "V3 M2 results")
+- [x] **V3 M3 — Main menu first impression** (see "V3 M3 results")
+- [x] **V3 M4 — In-game HUD** (see "V3 M4 results")
+- [x] **V3 M5 — Thruster control and safe landings** (see "V3 M5 results")
+- [x] **V3 M6 — Realistic crashes and destruction** (see "V3 M6 results")
+- [x] **V3 M7 — Race mode** (see "V3 M7 results")
+- [x] **V3 M8 — Taxi mode** (see "V3 M8 results")
+- [ ] V3 M9 — Kids, Heist, Career, saves, garage
+- [ ] V3 M10 — Polish
+- **Stopped here by request after M8.** Not started: M9 (Kids Mode challenges, Heist, Career with 100 tasks, save
+  system upgrades, Garage paints / upgrades) and M10 (polish, loading tips, final pass). Kids Mode currently exists only
+  as the basic version from M1 (no police, no damage, speed cap); Heist / Career mode cards open the existing mission list.
+- **Next:** V3 M9, starting with Kids Mode challenges.
+
+## V3 M8 results
+- `game/Taxi.js`: 10-minute shift (PLAY > TAXI, or stop at one of 8 taxi stands shown on the minimap and map). A
+  passenger (one instance of the pedestrian mesh, waving) waits at the kerb 140-420 m away with a yellow light column and
+  a GPS route; stop within 9 m to pick up. The destination is a road point 500-1500 m away, preferring another district,
+  with a green column and route. Stop within 14 m to drop off.
+- Pay: fare $12 + $0.055 per metre, a time bonus of up to 60% for beating the par time, and a tip starting at 30% that
+  drops with every crash (and big jumps) and slowly recovers with smooth driving. Paid as cash + rep.
+- Passenger subtitles (radio line with their name): destination on pickup, excited at high speed, scared after crashes,
+  shocked in the air, happy (or annoyed when late) on arrival. HUD objective shows fares, earnings, current job, tip and
+  the shift timer; the shift ends with a results screen (fares, earnings, tips, best fare, stars). TAXI roof light on
+  the car during the shift.
+- Verified headless: shift starts, pickup -> ride to the Shopping District (646 m, $48 fare) -> drop-off paid $90 ->
+  next passenger waiting -> results at the end of the shift.
+
+## V3 M7 results
+- 6 tracks: Highway Ring Sprint (golden hour), Downtown Circuit (noon, clear), Canyon Drift Run (morning, fog) plus
+  three new ones in `game/RaceTracks.js` routed over the road graph from a few waypoints (`roadLoop`): Harbor Loop
+  (golden hour, rain), Park Speedway (morning, 3 laps), Night Neon Circuit (night, storm). Defaults live in
+  `TRACK_SETUP`; the player can change them.
+- Race setup (PLAY > RACE): track cards with rendered stills, then Opponents 1-9, Time of day, Weather, Police
+  Interference (off by default: `game.noPolice` blocks heat and police during the race), START RACE.
+- No floating rings: checkpoints are invisible lines. `TrackDressing` builds per race (and removes afterwards): a
+  start / finish gantry with five start lights (fill red during the countdown, all green at GO), tyre walls with
+  colliders and arrow boards on the outside of every corner, knockable apex cones, and data-driven obstacles: cones,
+  barrels, construction barriers (light dynamic bodies), oil slicks (grip x0.45) and water puddles (spray, grip x0.78)
+  via `Vehicle.surfaceGrip`, a shortcut ramp (convex-hull collider), slow trucks (kinematic, 9 m/s along the line)
+  and sliding barriers (kinematic, across the lane) on the harder tracks.
+- 9 rival drivers (NOVA, KESTREL, RAZOR, HALO, VIPER, BLITZ, ONYX, CYRA, EMBER) with their own colours / numbers,
+  5 racing lines for overtaking, varied skill, existing braking / passing / recovery AI; 2-wide grid for up to 10.
+- Minimap draws the racing line ahead (~200 m) with an arrow head. Live standings, lap / best lap, records as before;
+  results show the podium (top 3 names).
+- Verified headless: Night Neon Circuit with 9 opponents -> 10 racers, 32 dynamic obstacles, 3 movers, 2 grip zones,
+  countdown lights, no police.
+
+## V3 M6 results
+- `fx/Destruction.js`: breakaway parts with real physics: the visual part is cloned into a dynamic Rapier body (box
+  collider from its bounds) that keeps the car's velocity, tumbles, bounces and slides (sparks while scraping), lives
+  20 s, max 14 at once; the original is hidden until repair. Roadster parts: front splitter (bumper) at 55% damage, rear
+  wing (85%, or 65% with rear-zone hits), the door on the damaged side (78% + side-zone hits), a wheel at 93%.
+  `RoadsterModel.lost` + `repair()` restore everything. (The model has no side mirrors.)
+- Body deformation: player dents as before plus a crumpled shell when wrecked; `dentModel()` gives police and traffic
+  cars the same vertex dents in a lighter form (traffic geometry is copied per car first, since it is shared per type).
+- Glass shards, sparks, smoke (from 50%) and V3 fire under the hood below 15% chassis; big side hits (>13 m/s, mostly
+  horizontal, from the side) roll the car over with a torque + lift impulse; impacts over 17 m/s trigger the slow-motion
+  crash camera (at most once every 6 s, not during activities).
+- Wrecked: crumpled smoking burning car, "WRECKED" screen with a RESPAWN button (R / Enter, auto after 7 s). In free
+  roam the quick respawn charges a repair bill instead of a results screen; activities still fail as before.
+- Verified headless: 40 m/s side crash -> 47% damage, front zone 100%, crash cam; heavy damage -> wing, left door and a
+  wheel break off as physics bodies; wreck -> screen -> respawn restores the car and all parts.
+
+## V3 M5 results
+- Assisted Flight (default) controls: Space lift, Shift boost, W / S pitch the nose gently (the stabiliser holds a
+  ±0.22 rad attitude instead of flipping), A / D turn in the air (yaw RCS), Q / E an optional barrel roll that always
+  finishes level and is cancelled if the landing is less than 0.9 s away. The car is always held level otherwise.
+- Auto landing: when the predicted touchdown (landing preview ray-cast) is < 0.75 s away and the car sinks faster than
+  6.5 m/s, a hover burst caps the sink rate; the stabiliser levels harder in the last 0.9 s.
+- Pressure reserve: in Assisted Flight 12% of the COPV tank is held back; only the auto landing may use it
+  (`EnergySystem.usePressure(amount, { landing: true })`).
+- A landing on the wheels in Assisted Flight is capped at 2 damage (`Game.onPlayerImpact`); walls and Pro Flight
+  crashes still hurt. Pro Flight keeps full manual control with gentle stabilisation.
+- Scripted test (45 m up, 30 m/s, tilted 0.6 rad): Assisted touched down at -6.7 m/s, upright, 0% damage, 41% COPV
+  left; Pro Flight hit at -29 m/s and lost 13% chassis.
+
+## V3 M4 results
+- One dash stack bottom right (`#dash`, fonts and colours from the new menu): a large speedometer (single thick 240°
+  arc with a blue -> cyan -> white -> red conic gradient, smoothed needle, fine ticks with numbers, slim power / regen
+  sweep inside) and the speed in big Rajdhani numbers; under it a THRUSTER bar like an Asphalt nitro bar: 20 skewed
+  segments that drain and refill with COPV pressure, glow and pulse while thrusters fire, turn yellow / red when low,
+  read EMP when disabled.
+- Battery: icon + rounded bar + percent, green -> yellow -> red with a pulse when low; while charging at a station the
+  bar turns cyan with flowing stripes and a bolt in the icon (`hud.charging`, set by Services).
+- Chassis: top-view car silhouette with front / rear / left / right zones coloured by `player.zoneDamage` (filled from
+  impact points in `Game.onPlayerImpact`, reset on repair / respawn) plus a health bar. The thruster diagram from V2
+  sits beside it (88 px).
+- Settings > HUD show / hide and bottom / side / top positions still work (the stack moves as a whole); nothing sits
+  in the centre of the screen except warnings. Scaled down on short and phone screens.
+
+## V3 M3 results
+- Fonts bundled locally: Rajdhani 500/600/700 (display) and Inter 400/500/600/800 (UI) in `vendor/fonts` (from
+  @fontsource, licences included), loaded with @font-face. Zero external requests.
+- `ui/GarageScene.js` rebuilt as a bright photo studio: a 360° lathed infinity cove (floor curving into the wall), three
+  large RectAreaLights overhead (vendored `RectAreaLightUniformsLib`) with visible soft boxes, a slow soft sweep bar
+  gliding over the paint, a soft-shadow key light, a glossy light floor (planar reflection under an 84% coat with a
+  radial fade) and an elliptical contact shadow under the car; a white soft-box PMREM for reflections. Neon poles,
+  haze beams, glowing rims and all flicker / glitch effects removed. Settings > Graphics > Showroom: Light Studio
+  (default) or Night Studio (dark cove, dim floor, cool / warm rim lights). In the showroom the renderer switches to a
+  neutral grade, gentle bloom and a light vignette (`Renderer.setStudio`).
+- Car viewer: drag to rotate with inertia, smooth wheel / pinch zoom with limits, right-drag (or Shift-drag) and
+  two-finger pan; no hotspot dots. Clicking a door / the roof / the rear / the headlights toggles doors, roof panel,
+  thruster reveal, lights (`GarageScene.pick` / `partOf`); hovering a part draws a soft blue outline (postprocessing
+  `OutlineEffect`, created on first use).
+- Menu: light theme over the light studio (frosted white glass, dark text), dark glass over the game / Night Studio;
+  Rajdhani headings, icon per item, focus = slide + accent bar + raised plate, subtitles expand on focus, eased fade /
+  slide-in of every screen. Player card: level badge, name, XP bar to the next level, large cash / rep / jobs numbers
+  with icons. Mode cards are big image cards with real stills rendered from the city, hover zoom and accent ring.
+  Responsive rules for <=1100 px, short screens, ultrawide (>=2200 px) and phones (two-column menu at the bottom).
+  Checked at 1280x720, 1920x1080, 2560x1080 and 390x844.
+
+## V3 M2 results
+- Motor (`audio/CarAudio.js`) rebuilt: sine fundamental + soft triangle 2nd + faint sine 3rd harmonic through a low-pass
+  (700 Hz rising to max 2 kHz), a gentle speed tone (sine, capped at 820 Hz, low-passed), a sub surge on hard throttle,
+  all through a soft compressor (-22 dB, 3:1). The saw whine, square inverter and 2.6-3.9 kHz turbine layers are gone.
+  Measured under throttle: 0.3% of the output energy above 2.5 kHz, spectral peak 43 Hz.
+- Softened: tyre squeal (lower, wider band, no chirp tone, half volume), cold-gas hiss (band-pass, no 6.5 kHz peak),
+  metal scrape, sirens (triangle + sine, 1.7 kHz low-pass), EMP, radio squelch, warnings (sine), UI clicks / hovers /
+  buy (short low sines + muted noise taps), popups, Cold Snap shimmer, stingers (triangle instead of saw).
+- Settings > Sound: Master, Music On/Off, Music style (Synthwave 96 BPM, Chill 80 BPM with jazzier 7th chords and soft
+  drums, Drum & Bass 172 BPM with a two-step beat), Music, Engine, SFX and UI volumes. `Music.setStyle()` switches live.
+
+## V3 M1 results
+- No locks: `Progress.districtOpen()` is always true, briefings and lists never lock, every mode card is open (Free Roam,
+  Race, Heist, Career, Taxi, Kids; until their own milestones Race/Heist/Career open the existing race / mission lists,
+  Taxi starts free roam, Kids starts free roam with `game.kidsMode`: no police or heat, no damage, speed capped).
+- `ui/MapView.js`: full-screen map (M, or MAP in the pause menu; pauses the game): roads, parks, district and
+  neighbourhood names, icons with a legend (charging, repair, tuning, police, studio, taxi stands, mission / race
+  starts), player arrow, route. Hover shows names; click an icon or any spot to set a waypoint; drag pans, wheel zooms.
+- `game/Navigation.js`: waypoint + A* route over the road graph (re-planned every 1.5 s), glowing chevrons on the road
+  ahead (every 9 m out to ~170 m), route line on the minimap and the map, rim arrow when the target is off the minimap,
+  distance on the HUD, "ARRIVED" + optional callback. API: `game.nav.setWaypoint(x, z, label, {color, onArrive})`.
+- Minimap 260 px with bigger icons; below 25% battery a pulsing ⚡ rim arrow points to the nearest charging station.
+- Charging: every station has a 13 m lit "⚡ CHARGE" pylon with a beacon; `placeChargingHubs()` ray-casts for open flat
+  ground beside roads and adds 7 canopy hubs outside the grid (harbor x2, construction x2, canyon, waterfront,
+  highway), 11 stations in total. Verified headless: 42 charge bays registered, all with service points.
+
+
 - [x] **V2 M1 — Title screen and main menu** (see "V2 M1 results")
 - [x] **V2 M2 — Daylight, weather and lighting quality** (see "V2 M2 results")
 - [x] **V2 M3 — City overhaul (roads, districts, landmarks, people, Grafigator)** (see "V2 M3 results")

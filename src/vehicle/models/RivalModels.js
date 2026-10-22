@@ -9,6 +9,12 @@ export const RIVALS = [
   { name: 'NOVA', color: 0xd0186a, glow: 0xff2a9a, number: 7 },
   { name: 'KESTREL', color: 0x5fae12, glow: 0x9cff3a, number: 22 },
   { name: 'RAZOR', color: 0xe0670c, glow: 0xffa040, number: 46 },
+  { name: 'HALO', color: 0xe8e8ea, glow: 0x9fe0ff, number: 3 },
+  { name: 'VIPER', color: 0x0f8a6a, glow: 0x3affc0, number: 13 },
+  { name: 'BLITZ', color: 0xf2c200, glow: 0xffe060, number: 88 },
+  { name: 'ONYX', color: 0x18191c, glow: 0xa060ff, number: 0 },
+  { name: 'CYRA', color: 0x1f56d8, glow: 0x60a8ff, number: 19 },
+  { name: 'EMBER', color: 0xa8141c, glow: 0xff5040, number: 51 },
 ];
 
 export class RivalModel extends LoftedCar {

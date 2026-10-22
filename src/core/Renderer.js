@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import {
   EffectComposer, RenderPass, EffectPass, BloomEffect, ToneMappingEffect, ToneMappingMode,
-  VignetteEffect, SMAAEffect, SMAAPreset, Effect, BlendFunction, EffectAttribute, DepthOfFieldEffect,
+  VignetteEffect, SMAAEffect, SMAAPreset, Effect, BlendFunction, EffectAttribute, DepthOfFieldEffect, OutlineEffect, KernelSize,
 } from 'postprocessing';
 
 const gradeFrag = /* glsl */ `
@@ -16,6 +16,7 @@ uniform vec3 flashColor;
 uniform float time;
 uniform float saturation;
 uniform float warmth;
+uniform float tone;
 
 float h21(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
 
@@ -24,8 +25,8 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   // Split toning (multiplicative): deep teal shadows, warm orange highlights.
   float hl = smoothstep(0.04, 0.55, l);
-  c *= mix(vec3(0.86, 1.0, 1.1), mix(vec3(1.0), vec3(1.08, 1.0, 0.9), warmth), hl);
-  c += vec3(0.0, 0.0025, 0.004) * (1.0 - hl);
+  c *= mix(vec3(1.0), mix(vec3(0.86, 1.0, 1.1), mix(vec3(1.0), vec3(1.08, 1.0, 0.9), warmth), hl), tone);
+  c += vec3(0.0, 0.0025, 0.004) * (1.0 - hl) * tone;
   // Saturated neon accents.
   c = mix(vec3(l), c, saturation);
   // Ghost Mode: desaturated, cool, slightly darker.
@@ -61,6 +62,7 @@ class GradeEffect extends Effect {
         ['time', new THREE.Uniform(0)],
         ['saturation', new THREE.Uniform(1.18)],
         ['warmth', new THREE.Uniform(1)],
+        ['tone', new THREE.Uniform(1)],
       ]),
     });
   }
@@ -218,6 +220,30 @@ export class Renderer {
     this.composer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+  }
+
+  // Showroom grading: neutral colours, gentle bloom, light vignette (clean studio look).
+  setStudio(on) {
+    const u = this.grade.uniforms;
+    u.get('tone').value = on ? 0 : 1;
+    u.get('saturation').value = on ? 1.04 : 1.18;
+    this.bloom.intensity = on ? 0.3 : 1.15;
+    this.bloom.luminanceMaterial.threshold = on ? 0.97 : 0.92;
+    this.vignette.darkness = on ? 0.28 : 0.52;
+  }
+
+  // Soft outline around hovered car parts in the showroom (created on first use).
+  setOutline(scene, meshes) {
+    if (!this.outline) {
+      this.outline = new OutlineEffect(scene, this.camera, {
+        blendFunction: BlendFunction.SCREEN, edgeStrength: 3.5, pulseSpeed: 0, visibleEdgeColor: 0x3fd8ff, hiddenEdgeColor: 0x1a5a70,
+        blur: true, kernelSize: KernelSize.SMALL, xRay: false,
+      });
+      this.outlinePass = new EffectPass(this.camera, this.outline);
+      this.composer.addPass(this.outlinePass, 1);
+    }
+    this.outline.selection.set(meshes || []);
+    this.outlinePass.enabled = !!(meshes && meshes.length);
   }
 
   setDof(on) {

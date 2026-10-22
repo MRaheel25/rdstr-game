@@ -22,11 +22,13 @@ export class AudioSystem {
     this.police = new PoliceAudio(e);
     this.sfx = new SFX(e);
     this.music = new Music(e);
+    this.music.setStyle(game.settings.get('musicStyle'));
     this.music.start();
     this.muffle = 0;
     this.menu = false;
     game.settings.onChange((k) => {
-      if (k.endsWith('Volume')) e.applyVolumes();
+      if (k.endsWith('Volume') || k === 'musicOn') e.applyVolumes();
+      if (k === 'musicStyle') this.music.setStyle(game.settings.get('musicStyle'));
     });
     game.vfx.onExplosion = (p, power) => this.sfx.explosion(p, clamp(power, 0.4, 1.5));
     this.bindEvents();

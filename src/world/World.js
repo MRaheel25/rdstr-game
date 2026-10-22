@@ -18,6 +18,7 @@ import { buildConstruction } from './districts/Construction.js';
 import { buildCanyon } from './districts/Canyon.js';
 import { districtAt, WATER_Y } from './Layout.js';
 import * as M from './Materials.js';
+import { placeChargingHubs } from './districts/Landmarks.js';
 import { G, groups } from '../core/Physics.js';
 
 const _v = new THREE.Vector3();
@@ -62,6 +63,8 @@ export class World {
     progress('Hillside Canyon');
     buildCanyon(gen);
     buildWaterfront(gen);
+    // V3: charging hubs in every district outside the grid (at least 8 stations in total).
+    this.hubs = placeChargingHubs(gen, ['harbor', 'construction', 'canyon', 'waterfront', 'highway', 'construction', 'harbor'], districtAt);
     buildDecor(gen);
     gen.finalize();
     gen.props.build();

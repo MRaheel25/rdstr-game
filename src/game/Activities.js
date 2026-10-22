@@ -85,7 +85,7 @@ export class ActivityManager {
       for (const d of this.defs) {
         if (!this.startMarkers.has(d.id)) continue;
         const rec = d.kind === 'race' ? this.progress.data.races[d.id] : this.progress.data.missions[d.id];
-        list.push({ x: d.start.x, z: d.start.z, color: d.kind === 'race' ? '#ff3df0' : '#ffd23f', done: !!(rec && rec.done), kind: d.kind });
+        list.push({ x: d.start.x, z: d.start.z, color: d.kind === 'race' ? '#ff3df0' : '#ffd23f', done: !!(rec && rec.done), kind: d.kind, label: d.name });
       }
     }
     this.game.minimap.setMarkers(list);
@@ -140,10 +140,23 @@ export class ActivityManager {
       if (race.state === 'running') {
         const ci = race.cps[race.player.cp % race.cpPerLap];
         const ahead = race.center[Math.min(race.center.length - 1, ci + 1)];
-        a.gate.move(c, ahead.clone().sub(race.center[ci]));
-        const ni = race.cps[(race.player.cp + 1) % race.cpPerLap];
-        if (a.nextGate && ni != null) a.nextGate.move(race.center[ni]);
       }
+      // GPS racing line on the minimap: the next ~200 m of the centre line.
+      const n = race.center.length;
+      const k0 = Math.max(0, race.cps[(race.player.cp + race.cpPerLap - 1) % race.cpPerLap] || 0);
+      let best = k0;
+      let bd = Infinity;
+      for (let k = 0; k < 40; k++) {
+        const q = race.center[(k0 + k) % n];
+        const d = Math.hypot(q.x - g.player.position.x, q.z - g.player.position.z);
+        if (d < bd) {
+          bd = d;
+          best = (k0 + k) % n;
+        }
+      }
+      const line = [];
+      for (let k = 0; k < 26; k++) line.push(race.center[race.def.closed ? (best + k) % n : Math.min(n - 1, best + k)]);
+      g.minimap.raceLine = line;
       g.minimap.setMission({ x: c.x, z: c.z });
       const text = a.def.scoring === 'drift' ? 'DRIFT THE CANYON' : `LAP ${Math.min(a.def.laps, Math.floor(race.player.cp / race.cpPerLap) + 1)}/${a.def.laps}`;
       this.ui.objective(`${a.def.name.toUpperCase()} · ${text}`, null);
@@ -228,7 +241,7 @@ export class ActivityManager {
     g.state = 'briefing';
     g.audio && g.audio.ui('click');
     const record = def.kind === 'race' ? this.progress.data.races[def.id] : this.progress.data.missions[def.id];
-    const locked = this.progress.rep < def.rep ? `REQUIRES ${def.rep} REP  (YOU HAVE ${this.progress.rep})` : null;
+    const locked = null; // V3: nothing is locked
     this.ui.briefing(def, { kind: def.kind, record, districtName: this.districtName(def.district), locked }, {
       primary: () => {
         if (!locked) this.begin(def);
@@ -272,12 +285,14 @@ export class ActivityManager {
     g.heat.locked = def.lockHeat || 0;
     g.police.typeOverride = def.policeTypes || null;
     if (def.kind === 'race') {
-      a.race = new Race(g, def, a.ctx);
+      // V3: options from the race setup screen; checkpoints are invisible lines.
+      const opts = g.raceOpts || { opponents: 3, police: false };
+      g.noPolice = !opts.police;
+      if (g.noPolice) g.police.clearAll();
+      a.race = new Race(g, def, a.ctx, opts);
       const s = a.race.grid[0];
       this.teleport(s.pos, s.yaw);
       g.inputLock = true;
-      a.gate = this.markers.add({ kind: 'gate', pos: a.race.nextCheckpoint(a.race.player), color: 0xff3df0 });
-      a.nextGate = this.markers.add({ kind: 'column', pos: a.race.center[a.race.cps[1 % a.race.cpPerLap]], color: 0x803070, scale: 0.4 });
       a.ctx.countdown('3');
       g.audio && g.audio.sfx.stinger('checkpoint');
     } else {
@@ -459,6 +474,7 @@ export class ActivityManager {
       cash = Math.round(def.reward.cash * share);
       rep = Math.round(def.reward.rep * share);
       rows.push(['POSITION', `${ord} / ${a.race.racers.length}`]);
+      if (r.podium) rows.push(['PODIUM', r.podium.map((n, i) => `${i + 1}. ${n}`).join('   ')]);
       rows.push(['TIME', fmtTime(r.time)]);
       if (def.laps > 1) rows.push(['BEST LAP', fmtTime(r.bestLap)]);
       if (def.scoring === 'drift') rows.push(['DRIFT SCORE', (r.drift || 0).toLocaleString()]);
@@ -574,6 +590,8 @@ export class ActivityManager {
       if (a.gate) a.gate.remove();
       if (a.nextGate) a.nextGate.remove();
       if (a.race) a.race.cleanup();
+      g.noPolice = false;
+      g.minimap.raceLine = null;
       g.police.clearAll();
       g.heat.locked = 0;
       g.heat.clear('reset');

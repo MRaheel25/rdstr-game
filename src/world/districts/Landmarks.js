@@ -207,6 +207,8 @@ export function chargingStation(gen, lot, side = 's') {
       mk.quad(new THREE.Vector3(a.x - 0.07, Y0 + 0.04, a.z - 0.07), new THREE.Vector3(a.x + 0.07, Y0 + 0.04, a.z + 0.07), new THREE.Vector3(b.x + 0.07, Y0 + 0.04, b.z + 0.07), new THREE.Vector3(b.x - 0.07, Y0 + 0.04, b.z - 0.07), [[0, 0], [1, 0], [1, 1], [0, 1]], new THREE.Vector3(0, 1, 0));
     }
   }
+  const py = F.p(W / 2 + 5, v0 - 2);
+  chargePylon(gen, py.x, Y0, py.z, F.yaw);
   poi(gen, 'charge', pc.x, pc.z, 'Charging Station');
   backBuilding(gen, lot, F, v0 + D + 6);
 }
@@ -221,7 +223,8 @@ export function chargingBays(gen, x, z, yaw, count = 3) {
     gen.props.add('charger', x + ox - fx * 3.2, Y0, z + oz - fz * 3.2, yaw);
     service(gen, 'charge', x + ox, z + oz, yaw, { cable: { x: x + ox - fx * 3.2, y: Y0 + 1.3, z: z + oz - fz * 3.2 } });
   }
-  poi(gen, 'charge', x, z, 'Charging');
+  chargePylon(gen, x + fz * (count * 2.5 + 3), Y0, z - fx * (count * 2.5 + 3), yaw);
+  poi(gen, 'charge', x, z, 'Charging Station');
 }
 
 // A lot's street front by side: 's' (south edge, facing +z), 'n', 'e', 'w'.
@@ -434,4 +437,136 @@ function doorTexture() {
     x.fillStyle = '#e7f75b';
     x.fillRect(50, 120, 28, 4);
   });
+}
+
+// ---- V3: unmissable charging -------------------------------------------------------------
+// Tall lit pylon with a VOLT CHARGE sign box on top, visible from far away (both faces).
+let pylonMats = null;
+export function chargePylon(gen, x, y, z, yaw) {
+  if (!pylonMats) {
+    pylonMats = {
+      face: new THREE.MeshBasicMaterial({ map: textTexture('⚡ CHARGE', { w: 512, h: 256, bg: '#04202a', color: '#5ff0ff', font: 'bold 120px "Arial Black", Arial, sans-serif' }), color: new THREE.Color(1.8, 1.8, 1.8) }),
+      glow: new THREE.MeshBasicMaterial({ color: new THREE.Color(0x40e8ff).multiplyScalar(3) }),
+    };
+  }
+  const H = 13;
+  gen.solidBox('darkMetal', x, y + H / 2, z, 0.6, H, 0.6, 0);
+  gen.batch(x, z, 'chargeGlow').box(x, y + H / 2, z, 0.12, H - 1, 0.66, yaw);
+  const sw = 5.2;
+  const sh = 2.6;
+  for (const side of [0, Math.PI]) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(sw, sh), pylonMats.face);
+    m.position.set(x + Math.sin(yaw + side) * 0.42, y + H + sh / 2, z + Math.cos(yaw + side) * 0.42);
+    m.rotation.y = yaw + side;
+    gen.addStatic(m, false, { shadows: false });
+    m.userData.decal = true;
+  }
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(sw + 0.3, sh + 0.3, 0.7), pylonMats.glow);
+  frame.scale.set(1, 1, 1);
+  frame.position.set(x, y + H + sh / 2, z);
+  frame.rotation.y = yaw;
+  const inner = new THREE.Mesh(new THREE.BoxGeometry(sw + 0.1, sh + 0.1, 0.8), new THREE.MeshStandardMaterial({ color: 0x0a0e12 }));
+  inner.position.copy(frame.position);
+  inner.rotation.y = yaw;
+  for (const m of [frame, inner]) {
+    gen.addStatic(m, false, { shadows: false });
+    m.userData.decal = true;
+  }
+  gen.beacons.push(new THREE.Vector3(x, y + H + sh + 0.6, z));
+  gen.neonLights && gen.neonLights.push({ x, y: y + H, z, color: new THREE.Color(0x40e8ff), w: 6, high: true });
+}
+
+// Freestanding roadside charging hub (canopy + 4 bays + pylon) for districts outside the grid.
+// (x, z) = centre of the pad, (nx, nz) = unit direction from the pad towards the road.
+export function chargingHub(gen, x, y, z, nx, nz) {
+  const bays = 4;
+  const W = bays * 5;
+  const D = 12;
+  const v0 = 3;
+  const F = frame(x + nx * (v0 + D / 2), z + nz * (v0 + D / 2), nx, nz);
+  const pc = F.p(0, v0 + D / 2);
+  const [sx, sz] = F.size(W + 4, D + 4);
+  gen.batch(pc.x, pc.z, 'concrete').flatRect(pc.x, y + 0.05, pc.z, sx, sz, 0, 0.25);
+  const sol = (u, yy, v, su, sy, sv, batch = 'darkMetal', color) => {
+    const c = F.p(u, v);
+    const [a, b] = F.size(su, sv);
+    gen.solidBox(batch, c.x, yy, c.z, a, sy, b, 0, { color, batchOpts: color ? { color: true } : {} });
+  };
+  sol(0, y + 5.4, v0 + D / 2, W + 4, 0.5, D + 2, 'paint', [0.92, 0.94, 0.96]);
+  const [gx, gz] = F.size(W + 3.6, D + 1.6);
+  gen.batch(pc.x, pc.z, 'chargeGlow').box(pc.x, y + 5.1, pc.z, gx, 0.06, gz, 0);
+  for (const u of [-W / 2 - 1.5, W / 2 + 1.5]) for (const v of [v0, v0 + D]) sol(u, y + 2.6, v, 0.4, 5.2, 0.4);
+  const sp = F.p(0, v0 - 1.02);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(14, 1.4), new THREE.MeshBasicMaterial({ map: textTexture('⚡ VOLT CHARGE', { w: 512, h: 128, bg: '#05121a', color: '#21e8ff', font: 'bold 64px Arial' }), color: new THREE.Color(1.6, 1.6, 1.6) }));
+  m.position.set(sp.x, y + 6.3, sp.z);
+  m.rotation.y = F.yaw;
+  gen.addStatic(m, false, { shadows: false });
+  m.userData.decal = true;
+  for (let k = 0; k < bays; k++) {
+    const u = -W / 2 + 2.5 + k * 5;
+    const ch = F.p(u - 2.1, v0 + D - 1.2);
+    gen.props.add('charger', ch.x, y, ch.z, F.yaw);
+    const p = F.p(u, v0 + D / 2);
+    service(gen, 'charge', p.x, p.z, F.yaw + Math.PI, { y, cable: { x: ch.x, y: y + 1.3, z: ch.z } });
+  }
+  const py = F.p(W / 2 + 5, v0);
+  chargePylon(gen, py.x, y, py.z, F.yaw);
+  poi(gen, 'charge', pc.x, pc.z, 'Charging Station');
+}
+
+// Find open, flat ground beside a road in each listed district and put a hub there. Needs
+// a physics step first so ray casts see the static colliders.
+export function placeChargingHubs(gen, districts, districtAt) {
+  const phys = gen.physics;
+  phys.world.step(phys.eventQueue);
+  const down = new THREE.Vector3(0, -1, 0);
+  const o = new THREE.Vector3();
+  const placed = [];
+  // Footprint: 30 m along the road, 24 m deep starting at the road edge.
+  const free = (ex, ez, nx, nz, y0) => {
+    for (let a = -15; a <= 15; a += 3) {
+      for (let b = 0; b <= 24; b += 3) {
+        o.set(ex + nx * b - nz * a, y0 + 40, ez + nz * b + nx * a);
+        const hit = phys.raycast(o, down, 60, undefined, null);
+        if (!hit) return false;
+        if (Math.abs(y0 + 40 - hit.timeOfImpact - y0) > 0.5) return false;
+      }
+    }
+    return true;
+  };
+  for (const id of districts) {
+    const edges = gen.graph.edges.filter((e) => e.kind !== 'highway' && e.kind !== 'ramp' && e.kind !== 'stunt' &&
+      e.points.every((p) => Math.abs(p.y) < 8) && districtAt(e.points[e.points.length >> 1].x, e.points[e.points.length >> 1].z).id === id);
+    let done = false;
+    for (let k = 0; k < 120 && !done && edges.length; k++) {
+      const e = edges[(k * 7919) % edges.length];
+      const i = Math.min(e.points.length - 2, Math.floor(((k * 0.37) % 1) * (e.points.length - 1)));
+      const a = e.points[i];
+      const b = e.points[i + 1];
+      const len = Math.hypot(b.x - a.x, b.z - a.z);
+      if (len < 30) continue;
+      const t = 0.3 + ((k * 0.21) % 0.4);
+      for (const side of [1, -1]) {
+        // n points away from the road.
+        const nx = (-(b.z - a.z) / len) * side;
+        const nz = ((b.x - a.x) / len) * side;
+        const half = (e.laneWidth && e.lanes ? e.laneWidth * e.lanes + 0.6 : 8) + 3;
+        const rx = a.x + (b.x - a.x) * t;
+        const rz = a.z + (b.z - a.z) * t;
+        const y0 = a.y + (b.y - a.y) * t;
+        const ex = rx + nx * half;
+        const ez = rz + nz * half;
+        if (placed.some((p) => Math.hypot(p.x - ex, p.z - ez) < 200)) continue;
+        if (!free(ex, ez, nx, nz, y0 + 0.02)) continue;
+        const cx = ex + nx * 12;
+        const cz = ez + nz * 12;
+        gen.props.removeNear(cx, cz, 18);
+        chargingHub(gen, cx, y0 + 0.02, cz, -nx, -nz);
+        placed.push({ x: ex, z: ez, id });
+        done = true;
+        break;
+      }
+    }
+  }
+  return placed;
 }

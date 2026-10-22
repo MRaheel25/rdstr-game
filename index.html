@@ -29,22 +29,31 @@
     </div>
     <div id="popups"></div>
     <div id="hp-bar"><div class="hp-fill"></div><div class="hp-label">CHASSIS</div></div>
-    <div id="cluster">
-      <div class="gt batt"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="16" height="10" rx="1.5"/><rect x="19.5" y="10" width="2" height="4"/><path d="M11 8.5 8 12.5h3l-1 3 3.5-4.2h-3l1-2.8z" class="ic-fill"/></svg><div class="gt-body"><div class="gt-head"><span>BATTERY</span><b>100%</b></div><div class="gt-bar"><i></i></div><div class="gt-sub"></div></div></div>
-      <div class="gt hp"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6l-8-3z"/><path d="M9 12h6M12 9v6" class="ic-line"/></svg><div class="gt-body"><div class="gt-head"><span>CHASSIS</span><b>100%</b></div><div class="gt-bar"><i></i></div><div class="gt-sub"></div></div></div>
-      <div class="gt copv"><svg viewBox="0 0 24 24"><rect x="8" y="3" width="8" height="13" rx="4"/><path d="M10 18c0 2 2 3.5 2 3.5s2-1.5 2-3.5" class="ic-line"/><path d="M7 19c0 1.2.8 2 .8 2M17 19c0 1.2-.8 2-.8 2" class="ic-line"/></svg><div class="gt-body"><div class="gt-head"><span>THRUSTERS</span><b>100%</b></div><div class="gt-bar"><i></i></div><div class="gt-sub"></div></div></div>
-      <canvas id="thrust-view" width="120" height="120"></canvas>
-    </div>
     <div id="player-tag"></div>
+    <div id="nav-dist" class="hidden"></div>
     <div id="bottom-left">
       <div id="heat"><div class="stars"></div><div class="evade"><div class="evade-fill"></div><span class="evade-label"></span></div></div>
       <canvas id="minimap" width="220" height="220"></canvas>
     </div>
-    <div id="bottom-right">
-      <canvas id="gauge" width="300" height="300"></canvas>
-      <div id="speed-readout"><div class="speed">0</div><div class="unit">MPH</div></div>
-      <div id="mode-indicator">TRACK</div>
-      <div id="energy-readout"><span class="batt">100%</span><span class="temp">32°C</span><span class="copv">COPV 100%</span></div>
+    <div id="dash">
+      <div class="dash-speed">
+        <canvas id="gauge" width="300" height="300"></canvas>
+        <div id="speed-readout"><div class="speed">0</div><div class="unit">MPH</div></div>
+        <div id="mode-indicator">TRACK</div>
+        <div id="energy-readout"><span class="batt"></span><span class="temp"></span><span class="copv"></span></div>
+      </div>
+      <div class="nitro"><span class="dl">THRUST</span><div class="nitro-bar"></div><b>100%</b></div>
+      <div class="batt-w"><svg viewBox="0 0 30 16"><rect x="1" y="2" width="25" height="12" rx="2.5"/><rect x="26.5" y="5.5" width="2.5" height="5" rx="1"/><path class="bolt" d="M14.5 4 10 9h3.5l-1.5 3.5L17 7h-3.5z"/></svg><div class="bw-bar"><i></i></div><b>100%</b></div>
+      <div class="dash-low">
+        <div class="car-w"><svg viewBox="0 0 40 70">
+          <path class="z z-front" d="M10 6 Q20 0 30 6 L32 18 L8 18 Z"/>
+          <path class="z z-rear" d="M8 52 L32 52 L31 63 Q20 68 9 63 Z"/>
+          <path class="z z-left" d="M8 19 L13 19 L13 51 L8 51 Q5 35 8 19 Z"/>
+          <path class="z z-right" d="M27 19 L32 19 Q35 35 32 51 L27 51 Z"/>
+          <rect class="cab" x="14" y="21" width="12" height="28" rx="4"/>
+        </svg><div class="cw-info"><span class="dl">CHASSIS</span><div class="cw-bar"><i></i></div><b>100%</b></div></div>
+        <canvas id="thrust-view" width="88" height="88"></canvas>
+      </div>
     </div>
     <div id="warnings"></div>
     <div id="prompt" class="hidden"></div>

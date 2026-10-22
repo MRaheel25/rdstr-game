@@ -15,11 +15,12 @@ class SirenVoice {
     this.pan.connect(e.world);
     this.out = e.gain(0);
     this.out.connect(this.pan);
-    this.a = e.osc('sawtooth', 700);
-    this.b = e.osc('square', 703);
-    const bg = e.gain(0.35);
+    // V3: rounder siren (triangle + sine) with the highs rolled off.
+    this.a = e.osc('triangle', 700);
+    this.b = e.osc('sine', 703);
+    const bg = e.gain(0.5);
     this.b.connect(bg);
-    this.f = e.filter('lowpass', 2600, 1.2);
+    this.f = e.filter('lowpass', 1700, 0.7);
     this.a.connect(this.f);
     bg.connect(this.f);
     this.sirenG = e.gain(0);

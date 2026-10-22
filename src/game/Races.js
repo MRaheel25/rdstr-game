@@ -8,6 +8,7 @@ import { RivalModel, RIVALS } from '../vehicle/models/RivalModels.js';
 import { VehicleFX } from '../fx/VehicleFX.js';
 import { G, groups } from '../core/Physics.js';
 import { clamp } from '../util/math.js';
+import { EXTRA_TRACKS, TRACK_SETUP, TrackDressing, roadLoop } from './RaceTracks.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const _v = new THREE.Vector3();
@@ -91,20 +92,23 @@ export const RACES = [
     closed: false,
     cpSpacing: 140,
   },
+  // V3 tracks routed over the road graph from a few waypoints.
+  ...EXTRA_TRACKS.map((t) => ({ ...t, line: (world) => roadLoop(world, t.waypoints) })),
 ];
+for (const r of RACES) Object.assign(r, { tod: TRACK_SETUP[r.id]?.tod || 'noon', weather: TRACK_SETUP[r.id]?.weather || 'clear' });
 
 class Racer {
   constructor(race, game, rival, index, line, isPlayer = false) {
     this.game = game;
     this.race = race;
-    this.name = isPlayer ? 'VOLT' : rival.name;
+    this.name = isPlayer ? (game.progress ? game.progress.playerName : 'YOU') : rival.name;
     this.isPlayer = isPlayer;
     this.cp = 0; // checkpoints passed in total
     this.finished = false;
     this.finishTime = null;
     this.drift = 0;
     this.driftChain = 0;
-    this.skill = isPlayer ? 1 : 0.9 + index * 0.04;
+    this.skill = isPlayer ? 1 : 0.88 + ((index * 37) % 9) * 0.02;
     if (!isPlayer) {
       const model = new RivalModel(RIVAL, rival);
       const start = race.grid[index + 1];
@@ -183,10 +187,11 @@ class Racer {
 
 // Running race instance (created by the activity manager).
 export class Race {
-  constructor(game, def, ctx) {
+  constructor(game, def, ctx, opts = {}) {
     this.game = game;
     this.def = def;
     this.ctx = ctx;
+    this.opts = { opponents: 3, police: false, ...opts };
     this.state = 'countdown';
     this.time = 0;
     this.countdown = 3.6;
@@ -203,21 +208,23 @@ export class Race {
     else if (this.cps[this.cps.length - 1] !== n - 1) this.cps.push(n - 1);
     this.cpPerLap = this.cps.length;
     this.totalCps = this.cpPerLap * def.laps;
-    // Grid: 2 x 2 behind the start line.
+    // Grid: two columns behind the start line, one row every 7 m (up to 10 cars).
     const p0 = this.center[0];
     const dir = _w.subVectors(this.center[3], p0).setY(0).normalize().clone();
     const right = new THREE.Vector3(-dir.z, 0, dir.x);
     const yaw = Math.atan2(-dir.x, -dir.z);
     const lane = def.lineOffset;
-    this.grid = [
-      { pos: p0.clone().addScaledVector(dir, -8).addScaledVector(right, lane - 1.8), yaw },
-      { pos: p0.clone().addScaledVector(dir, -2).addScaledVector(right, lane + 1.8), yaw },
-      { pos: p0.clone().addScaledVector(dir, -14).addScaledVector(right, lane + 1.8), yaw },
-      { pos: p0.clone().addScaledVector(dir, -20).addScaledVector(right, lane - 1.8), yaw },
-    ];
+    const N = clamp(Math.round(this.opts.opponents), 1, 9);
+    this.grid = [];
+    for (let k = 0; k <= N; k++) {
+      const row = Math.floor(k / 2);
+      const col = k % 2 ? 1.9 : -1.9;
+      this.grid.push({ pos: p0.clone().addScaledVector(dir, -6 - row * 7.5).addScaledVector(right, lane + col), yaw });
+    }
     for (const g of this.grid) g.pos.y = ctx.groundY(g.pos) + 0.7;
-    // Racing lines for rivals (slightly different lanes), repeated for every lap.
-    const lines = [lane - 1.6, lane + 1.6, lane].map((d) => {
+    // Racing lines for rivals (different lanes so they can overtake), repeated for every lap.
+    const offs = [lane - 1.6, lane + 1.6, lane, lane - 0.8, lane + 0.8];
+    const lines = offs.map((d) => {
       const l = offsetLine(this.center, d, def.closed);
       const out = [];
       for (let k = 0; k < def.laps + 1; k++) out.push(...l.map((p) => p.clone().setY(p.y + 0.4)));
@@ -225,7 +232,9 @@ export class Race {
     });
     this.player = new Racer(this, game, null, -1, null, true);
     this.racers = [this.player];
-    RIVALS.forEach((r, i) => this.racers.push(new Racer(this, game, r, i, lines[i])));
+    for (let i = 0; i < N; i++) this.racers.push(new Racer(this, game, RIVALS[i % RIVALS.length], i, lines[i % lines.length]));
+    this.dressing = new TrackDressing(this);
+    this.dressing.setLights(0);
     this.lapStart = 0;
     this.lapTimes = [];
     this.bestLap = null;
@@ -279,7 +288,9 @@ export class Race {
       this.countdown -= dt;
       const now = Math.ceil(this.countdown);
       if (now !== before && now > 0 && now <= 3) this.ctx.countdown(String(now));
+      this.dressing.setLights(Math.min(5, Math.floor((3.6 - this.countdown) / 0.6)));
       if (this.countdown <= 0) {
+        this.dressing.setLights('go');
         this.state = 'running';
         g.inputLock = false;
         this.ctx.countdown('GO');
@@ -288,6 +299,7 @@ export class Race {
       return null;
     }
     this.time += dt;
+    this.dressing.update(dt);
     const wet = g.isWet();
     for (const r of this.racers) {
       if (r.isPlayer) continue;
@@ -322,7 +334,7 @@ export class Race {
         } else r.driftChain = Math.max(0, r.driftChain - dt * 3);
       }
     }
-    if (!this.policeJoined && this.time > 40 && g.heat.level === 0 && this.def.id !== 'canyon-drift') {
+    if (this.opts.police && !this.policeJoined && this.time > 40 && g.heat.level === 0 && this.def.id !== 'canyon-drift') {
       this.policeJoined = true;
       g.heat.setLevel(1);
       g.radio.say('Street race reported. Units, intercept the racers.', { priority: true });
@@ -346,10 +358,12 @@ export class Race {
 
   result() {
     const pos = this.positionOf(this.player);
-    return { ok: pos <= 3, position: pos, time: this.time, bestLap: this.bestLap, drift: Math.round(this.player.drift), reason: pos <= 3 ? null : 'Finished last' };
+    const order = this.def.scoring === 'drift' ? [...this.racers].sort((a, b) => this.driftScore(b) - this.driftScore(a)) : this.standings();
+    return { ok: pos <= 3, position: pos, time: this.time, bestLap: this.bestLap, drift: Math.round(this.player.drift), reason: pos <= 3 ? null : 'Off the podium', podium: order.slice(0, 3).map((r) => r.name) };
   }
 
   cleanup() {
+    if (this.dressing) this.dressing.dispose();
     for (const r of this.racers) r.remove();
     this.game.inputLock = false;
   }
