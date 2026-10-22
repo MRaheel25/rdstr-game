@@ -171,4 +171,45 @@ export default {
     await sleep(1000);
     await shot('after');
   },
+  // M6: breakaway parts, crash into a building, wreck screen + quick respawn.
+  async m6({ page, sleep, shot, log }) {
+    await page.evaluate(() => __game.startPlay({ district: 'downtown', tod: 'noon' }));
+    await sleep(1500);
+    await page.keyboard.press('Enter');
+    await sleep(3000);
+    await page.keyboard.press('h');
+    // Crash sideways into the studio at 40 m/s (facing east).
+    const crash = await page.evaluate(() => {
+      const g = __game;
+      g.test.teleport(2.6, 0.8, 60, -Math.PI / 2, 40);
+      const hp0 = g.player.hp;
+      g.test.simulate(1.5, () => {});
+      return { hpLoss: +((hp0 - g.player.hp) / g.player.maxHp * 100).toFixed(1), zones: g.player.zoneDamage, slowmo: g.slowmo.timer > 0 || g.takedownCam.cooldown > 0 };
+    });
+    log('crash', JSON.stringify(crash));
+    await sleep(1200);
+    await shot('crash');
+    // Heavy damage: parts break off.
+    const parts = await page.evaluate(() => {
+      const g = __game;
+      g.restorePlayer();
+      g.test.teleport(2.6, 0.8, 40, 0, 0);
+      g.player.zoneDamage = { front: 0.6, rear: 0.7, left: 0.8, right: 0.3 };
+      g.player.hp = g.player.maxHp * 0.06;
+      g.test.simulate(0.2, () => {});
+      g.playerVisual.update(0.016, g.player);
+      g.test.simulate(1.0, () => {});
+      return { lost: [...g.playerVisual.lost], bodies: g.destruction.parts.length };
+    });
+    log('parts', JSON.stringify(parts));
+    await sleep(1500);
+    await shot('parts');
+    await page.evaluate(() => { __game.player.hp = 0; });
+    await sleep(2500);
+    await shot('wrecked');
+    log('wrecked', await page.evaluate(() => JSON.stringify({ wrecked: __game.player.wrecked, screen: document.getElementById('wrecked')?.classList.contains('show') })));
+    await page.keyboard.press('KeyR');
+    await sleep(2500);
+    log('after respawn', await page.evaluate(() => JSON.stringify({ wrecked: __game.player.wrecked, hp: __game.player.hp / __game.player.maxHp, lost: __game.playerVisual.lost.size })));
+  },
 };

@@ -660,3 +660,11 @@ kbd { font-family: var(--mono); font-size: 10px; color: #9fb2c8; border: 1px sol
 #heat .stars .on { text-shadow: 0 0 8px var(--red); }
 @media (max-height: 640px) { #dash { transform: scale(0.85); transform-origin: right bottom; } }
 @media (max-width: 760px) { #dash { transform: scale(0.72); transform-origin: right bottom; } #bottom-left { transform: scale(0.7); transform-origin: left bottom; } }
+
+/* V3 wrecked screen */
+#wrecked { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%) scale(0.92); text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.4s var(--ease), transform 0.5s var(--ease); }
+#wrecked.show { opacity: 1; transform: translate(-50%, -50%); pointer-events: auto; }
+#wrecked .wk-title { font-family: var(--display); font-weight: 700; font-size: 96px; letter-spacing: 14px; color: #fff; text-shadow: 0 6px 30px rgba(255, 50, 60, 0.55); }
+#wrecked .wk-sub { font-size: 13px; letter-spacing: 5px; color: rgba(238,244,255,0.75); margin: -6px 0 18px; text-transform: uppercase; }
+#wrecked button { pointer-events: auto; background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 12px 26px; font: 700 16px var(--display); letter-spacing: 4px; cursor: pointer; box-shadow: 0 10px 30px rgba(31,123,255,0.4); }
+#wrecked button kbd { background: rgba(255,255,255,0.2); color: #fff; border: 0; margin-left: 8px; }

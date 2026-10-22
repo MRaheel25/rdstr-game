@@ -51,12 +51,28 @@ UPDATE_V3.md replaces UPDATE_V2.md Part 2. Smoke tests: `SCEN=./v3.mjs EXTRA='&m
 - [x] **V3 M3 — Main menu first impression** (see "V3 M3 results")
 - [x] **V3 M4 — In-game HUD** (see "V3 M4 results")
 - [x] **V3 M5 — Thruster control and safe landings** (see "V3 M5 results")
-- [ ] V3 M6 — Realistic crashes and destruction
+- [x] **V3 M6 — Realistic crashes and destruction** (see "V3 M6 results")
 - [ ] V3 M7 — Race mode
 - [ ] V3 M8 — Taxi mode
 - [ ] V3 M9 — Kids, Heist, Career, saves, garage
 - [ ] V3 M10 — Polish
-- **Next:** V3 M6 (crashes and destruction).
+- **Next:** V3 M7 (race mode).
+
+## V3 M6 results
+- `fx/Destruction.js`: breakaway parts with real physics: the visual part is cloned into a dynamic Rapier body (box
+  collider from its bounds) that keeps the car's velocity, tumbles, bounces and slides (sparks while scraping), lives
+  20 s, max 14 at once; the original is hidden until repair. Roadster parts: front splitter (bumper) at 55% damage, rear
+  wing (85%, or 65% with rear-zone hits), the door on the damaged side (78% + side-zone hits), a wheel at 93%.
+  `RoadsterModel.lost` + `repair()` restore everything. (The model has no side mirrors.)
+- Body deformation: player dents as before plus a crumpled shell when wrecked; `dentModel()` gives police and traffic
+  cars the same vertex dents in a lighter form (traffic geometry is copied per car first, since it is shared per type).
+- Glass shards, sparks, smoke (from 50%) and V3 fire under the hood below 15% chassis; big side hits (>13 m/s, mostly
+  horizontal, from the side) roll the car over with a torque + lift impulse; impacts over 17 m/s trigger the slow-motion
+  crash camera (at most once every 6 s, not during activities).
+- Wrecked: crumpled smoking burning car, "WRECKED" screen with a RESPAWN button (R / Enter, auto after 7 s). In free
+  roam the quick respawn charges a repair bill instead of a results screen; activities still fail as before.
+- Verified headless: 40 m/s side crash -> 47% damage, front zone 100%, crash cam; heavy damage -> wing, left door and a
+  wheel break off as physics bodies; wreck -> screen -> respawn restores the car and all parts.
 
 ## V3 M5 results
 - Assisted Flight (default) controls: Space lift, Shift boost, W / S pitch the nose gently (the stabiliser holds a

@@ -116,6 +116,7 @@ export class RoadsterModel extends CarVisual {
     }
     this.state = { doors: 0, doorTarget: 0, wing: 0, plate: 0, vents: 0, brake: 0, lights: 1, damage: 0 };
     this.dentQueue = [];
+    this.lost = new Set();
   }
 
   // smooth: blend the colour over ~0.6 s (showroom / garage live preview).
@@ -498,11 +499,39 @@ export class RoadsterModel extends CarVisual {
       if (this.onPartLost) this.onPartLost('splitter', this.splitter);
     }
     if (dmg < 0.05 && !this.splitter.visible) this.splitter.visible = true;
+    // V3 breakaway parts (with physics, see fx/Destruction.js), driven by damage and the
+    // zone that took the hits.
+    if (!sr && this.onPartLost) {
+      const zd = v.zoneDamage || {};
+      const lose = (key, obj, cond) => {
+        if (!cond || !obj || !obj.visible || this.lost.has(key)) return;
+        this.lost.add(key);
+        this.onPartLost(key, obj);
+      };
+      lose('wing', this.wing, dmg > 0.85 || (dmg > 0.65 && (zd.rear || 0) > 0.45));
+      for (const d of this.doors) {
+        const side = d.side > 0 ? 'right' : 'left';
+        lose(`door_${side}`, d.pivot, dmg > 0.78 && (zd[side] || 0) > 0.5);
+      }
+      if (dmg > 0.93) {
+        const side = (zd.left || 0) > (zd.right || 0) ? -1 : 1;
+        const i = this.cfg.wheels.findIndex((w) => Math.sign(w.x) === side && w.front === (((zd.front || 0) >= (zd.rear || 0))));
+        if (i >= 0) lose(`wheel_${i}`, this.wheelSpinners[i], true);
+      }
+    }
   }
 
   // Restore after repair / reset to garage.
   repair() {
     this.splitter.visible = true;
+    // Bring back everything that broke off.
+    if (this.lost.size) {
+      this.wing.visible = true;
+      for (const d of this.doors) d.pivot.visible = true;
+      for (const w of this.wheelSpinners) w.visible = true;
+      this.lost.clear();
+    }
+    this.shell.scale.set(1, 1, 1);
     const built = buildBody(ROADSTER_DESIGN);
     if (this.paintMesh) this.paintMesh.geometry = built.geometries.paint;
   }
