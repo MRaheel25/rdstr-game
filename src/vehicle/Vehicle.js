@@ -365,7 +365,7 @@ export class Vehicle {
       const fz = w.load;
       const massShare = fz / GRAVITY;
       const wet = this.wetGrip !== undefined && (w.surface === 'asphalt' || !w.surface) ? this.wetGrip : 1;
-      const grip = cfg.tire.mu * mode.grip[axle] * this.gripMul * surfaceGrip(w.surface) * wet * (w.popped ? 0.45 : 1) *
+      const grip = cfg.tire.mu * mode.grip[axle] * this.gripMul * (this.surfaceGrip ?? 1) * surfaceGrip(w.surface) * wet * (w.popped ? 0.45 : 1) *
         (L.boost > 0 ? 1.2 : 1);
       const fxMax = grip * fz;
       const fyMax = grip * fz;

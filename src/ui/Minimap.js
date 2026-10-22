@@ -179,6 +179,26 @@ export class Minimap {
         ctx.fill();
       }
     }
+    // Race: GPS racing line ahead with an arrow head.
+    if (this.raceLine && this.raceLine.length > 1) {
+      const L = this.raceLine;
+      ctx.strokeStyle = '#ff3df0';
+      ctx.lineWidth = 6 / z;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      L.forEach((p, i) => (i ? ctx.lineTo(p.x, p.z) : ctx.moveTo(p.x, p.z)));
+      ctx.stroke();
+      const a = L[L.length - 2];
+      const b = L[L.length - 1];
+      const ang = Math.atan2(b.z - a.z, b.x - a.x);
+      ctx.fillStyle = '#ff3df0';
+      ctx.beginPath();
+      ctx.moveTo(b.x + Math.cos(ang) * 14 / z, b.z + Math.sin(ang) * 14 / z);
+      ctx.lineTo(b.x + Math.cos(ang + 2.5) * 12 / z, b.z + Math.sin(ang + 2.5) * 12 / z);
+      ctx.lineTo(b.x + Math.cos(ang - 2.5) * 12 / z, b.z + Math.sin(ang - 2.5) * 12 / z);
+      ctx.fill();
+    }
     // GPS route.
     if (nav && nav.route.length > 1) {
       ctx.strokeStyle = nav.color;

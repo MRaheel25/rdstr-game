@@ -52,11 +52,31 @@ UPDATE_V3.md replaces UPDATE_V2.md Part 2. Smoke tests: `SCEN=./v3.mjs EXTRA='&m
 - [x] **V3 M4 — In-game HUD** (see "V3 M4 results")
 - [x] **V3 M5 — Thruster control and safe landings** (see "V3 M5 results")
 - [x] **V3 M6 — Realistic crashes and destruction** (see "V3 M6 results")
-- [ ] V3 M7 — Race mode
+- [x] **V3 M7 — Race mode** (see "V3 M7 results")
 - [ ] V3 M8 — Taxi mode
 - [ ] V3 M9 — Kids, Heist, Career, saves, garage
 - [ ] V3 M10 — Polish
-- **Next:** V3 M7 (race mode).
+- **Next:** V3 M8 (taxi mode).
+
+## V3 M7 results
+- 6 tracks: Highway Ring Sprint (golden hour), Downtown Circuit (noon, clear), Canyon Drift Run (morning, fog) plus
+  three new ones in `game/RaceTracks.js` routed over the road graph from a few waypoints (`roadLoop`): Harbor Loop
+  (golden hour, rain), Park Speedway (morning, 3 laps), Night Neon Circuit (night, storm). Defaults live in
+  `TRACK_SETUP`; the player can change them.
+- Race setup (PLAY > RACE): track cards with rendered stills, then Opponents 1-9, Time of day, Weather, Police
+  Interference (off by default: `game.noPolice` blocks heat and police during the race), START RACE.
+- No floating rings: checkpoints are invisible lines. `TrackDressing` builds per race (and removes afterwards): a
+  start / finish gantry with five start lights (fill red during the countdown, all green at GO), tyre walls with
+  colliders and arrow boards on the outside of every corner, knockable apex cones, and data-driven obstacles: cones,
+  barrels, construction barriers (light dynamic bodies), oil slicks (grip x0.45) and water puddles (spray, grip x0.78)
+  via `Vehicle.surfaceGrip`, a shortcut ramp (convex-hull collider), slow trucks (kinematic, 9 m/s along the line)
+  and sliding barriers (kinematic, across the lane) on the harder tracks.
+- 9 rival drivers (NOVA, KESTREL, RAZOR, HALO, VIPER, BLITZ, ONYX, CYRA, EMBER) with their own colours / numbers,
+  5 racing lines for overtaking, varied skill, existing braking / passing / recovery AI; 2-wide grid for up to 10.
+- Minimap draws the racing line ahead (~200 m) with an arrow head. Live standings, lap / best lap, records as before;
+  results show the podium (top 3 names).
+- Verified headless: Night Neon Circuit with 9 opponents -> 10 racers, 32 dynamic obstacles, 3 movers, 2 grip zones,
+  countdown lights, no police.
 
 ## V3 M6 results
 - `fx/Destruction.js`: breakaway parts with real physics: the visual part is cloned into a dynamic Rapier body (box

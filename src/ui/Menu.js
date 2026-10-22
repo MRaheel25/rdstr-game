@@ -476,6 +476,61 @@ export class Menu {
     this.onBack = () => this.showTitle();
   }
 
+  // ---- V3 race setup: track -> options -> race --------------------------------------------
+  showRaceSetup(focus = 0) {
+    const g = this.game;
+    this.screen = 'race-setup';
+    this.enterShowroom('title');
+    const defs = g.activities.defs.filter((d) => d.kind === 'race');
+    this.trackPreviews = this.trackPreviews || {};
+    const items = defs.map((d) => {
+      if (this.trackPreviews[d.id] === undefined) {
+        try {
+          this.trackPreviews[d.id] = g.renderPreview({ position: d.start.clone(), yaw: d.yaw || 0 }, 480, 300);
+        } catch (e) {
+          this.trackPreviews[d.id] = null;
+        }
+      }
+      const rec = g.progress.data.races[d.id];
+      const kind = d.scoring === 'drift' ? 'DRIFT RUN' : `${d.laps} LAPS`;
+      return {
+        label: d.name.toUpperCase(), sub: `${kind} · ${TODS[d.tod]?.label || ''} · ${WEATHERS[d.weather]?.label || ''}${rec && rec.bestTime != null ? ` · best ${fmt(rec.bestTime)}` : ''}`,
+        cls: 'card big', img: this.trackPreviews[d.id], action: () => this.showRaceOptions(d),
+      };
+    });
+    this.render(`
+      <div class="play-wrap">
+        <div class="step-head"><b>RACE</b><span>CHOOSE A TRACK</span></div>
+        <div class="menu-list cards"></div>
+        <div class="menu-foot">←→ SELECT · ENTER CONFIRM · ESC BACK</div>
+      </div>`, items, { cls: 'play-screen', horizontal: true, focus });
+    this.onBack = () => this.showPlay();
+  }
+
+  showRaceOptions(def) {
+    const g = this.game;
+    const o = this.raceSetup && this.raceSetup.id === def.id ? this.raceSetup : { id: def.id, opponents: 5, tod: def.tod, weather: def.weather, police: false };
+    this.raceSetup = o;
+    const items = [
+      { type: 'select', label: 'Opponents', options: [...Array(9)].map((_, i) => [i + 1, String(i + 1)]), get: () => o.opponents, set: (v) => (o.opponents = v) },
+      { type: 'select', label: 'Time of day', options: Object.keys(TODS).map((k) => [k, TODS[k].label]), get: () => o.tod, set: (v) => (o.tod = v) },
+      { type: 'select', label: 'Weather', options: Object.keys(WEATHERS).map((k) => [k, WEATHERS[k].label]), get: () => o.weather, set: (v) => (o.weather = v) },
+      { type: 'select', label: 'Police Interference', options: [[false, 'Off'], [true, 'On']], get: () => o.police, set: (v) => (o.police = v) },
+      { label: 'START RACE', cls: 'primary', action: () => {
+        g.raceOpts = { opponents: o.opponents, police: o.police };
+        g.startPlay({ activity: def, tod: o.tod, weather: o.weather });
+      } },
+      { label: 'BACK', cls: 'back', action: () => this.showRaceSetup() },
+    ];
+    this.render(`
+      <div class="panel settings-panel narrow">
+        <div class="panel-title">${esc(def.name.toUpperCase())}</div>
+        <p class="panel-note">${esc(def.brief)}</p>
+        <div class="menu-list"></div>
+      </div>`, items, { cls: 'settings-screen', focus: 4 });
+    this.onBack = () => this.showRaceSetup();
+  }
+
   stepDots(i) {
     return `<div class="step-dots">${[0, 1, 2, 3].map((k) => `<i class="${k <= i ? 'on' : ''}"></i>`).join('')}</div>`;
   }

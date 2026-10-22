@@ -212,4 +212,28 @@ export default {
     await sleep(2500);
     log('after respawn', await page.evaluate(() => JSON.stringify({ wrecked: __game.player.wrecked, hp: __game.player.hp / __game.player.maxHp, lost: __game.playerVisual.lost.size })));
   },
+  // M7: track list, then Night Neon Circuit with 9 opponents.
+  async m7({ page, sleep, shot, log }) {
+    await page.evaluate(() => __game.menu.showRaceSetup());
+    await sleep(1500);
+    await shot('tracks');
+    log(await page.evaluate(() => JSON.stringify(__game.activities.defs.filter((d) => d.kind === 'race').map((d) => [d.id, d.line(__game.world).length, d.tod, d.weather]))));
+    await page.evaluate(() => {
+      const g = __game;
+      const def = g.activities.defs.find((d) => d.id === 'neon-circuit');
+      g.raceOpts = { opponents: 9, police: false };
+      g.startPlay({ tod: def.tod, weather: def.weather });
+      g.activities.begin(def);
+    });
+    await sleep(2500);
+    await shot('grid');
+    log(await page.evaluate(() => {
+      const r = __game.activities.active.race;
+      const d = r.dressing;
+      return JSON.stringify({ racers: r.racers.length, dyn: d.dynamic.length, movers: d.movers.length, zones: d.zones.length, children: d.group.children.length, cps: r.cpPerLap, police: __game.noPolice });
+    }));
+    await sleep(6000);
+    await shot('racing');
+    log(await page.evaluate(() => JSON.stringify({ state: __game.activities.active && __game.activities.active.race.state, pos: __game.activities.active && __game.activities.active.race.positionOf(__game.activities.active.race.player) })));
+  },
 };

@@ -190,7 +190,7 @@ export class PoliceSystem {
   // ---- per frame ----------------------------------------------------------------
   update(dt, realDt) {
     const g = this.game;
-    if (g.kidsMode) {
+    if (g.kidsMode || g.noPolice) {
       if (this.units.length) this.clearAll();
       return;
     }
