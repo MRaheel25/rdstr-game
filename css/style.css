@@ -615,6 +615,7 @@ kbd { font-family: var(--mono); font-size: 10px; color: #9fb2c8; border: 1px sol
 .menu-item.card .mi-label { position: static; }
 /* Cards share the row and fit the screen: no horizontal scrollbar. */
 .menu-list.cards { overflow: visible; flex-wrap: nowrap; }
+#menu.light .menu-item.card .mi-label, #menu.light .menu-item.card.focus .mi-label { color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,0.6); }
 .menu-item.card { flex: 1 1 0; min-width: 0; width: auto; max-width: 280px; }
 .menu-list.cards::-webkit-scrollbar { display: none; }
 .step-dots i { border-radius: 2px; transform: none; }

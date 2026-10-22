@@ -35,14 +35,15 @@ export default {
       });
       const v0 = await page.evaluate(() => __game.player.speed);
       await page.keyboard.down('ArrowUp');
-      await sleep(2500);
+      await sleep(5000);
+      const held = await page.evaluate(() => ({ throttle: __game.player.controls.throttle, axis: __game.input.axes.throttle }));
       await page.keyboard.up('ArrowUp');
       const info = await page.evaluate(() => {
         const g = __game;
         const cols = g.activities.markers.items.filter((m) => m.kind === 'column');
         return { mode: g.mode, cap: g.player.speedCap, lock: g.inputLock, state: g.state, speed: g.player.speed.toFixed(1), columnsShown: cols.filter((m) => m.root.visible && m.root.children[0].visible).length, columns: cols.length };
       });
-      log('mode', JSON.stringify({ v0: v0.toFixed(1), ...info }));
+      log('mode', JSON.stringify({ v0: v0.toFixed(1), held, ...info }));
       if (mode === 'free') await shot('hud_day');
     }
     // Top speed: deterministic stepping on the Highway Ring straight, free roam caps.

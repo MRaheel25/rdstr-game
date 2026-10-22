@@ -975,6 +975,10 @@ export class Game {
       this._previewCond = cond;
       world.env.setConditions(start.tod || 'noon', start.weather || 'clear');
     }
+    // Activity markers (light columns, rings, labels) stay out of the stills.
+    const markers = this.activities && this.activities.markers.group;
+    const markersVis = markers && markers.visible;
+    if (markers) markers.visible = false;
     const stage = start.stage ? new THREE.Group() : null;
     if (stage) {
       start.stage(stage);
@@ -997,6 +1001,7 @@ export class Game {
     world.gen.staticMeshes.forEach((m, i) => (m.visible = vis[i]));
     world.props.dirty = true;
     if (stage) this.scene.remove(stage);
+    if (markers) markers.visible = markersVis;
     if (!this._previewBatch) this.restorePreviewConditions();
     const c = document.createElement('canvas');
     c.width = w;

@@ -18,10 +18,11 @@ const CAR_Y = 0.55; // lofted car visuals: root height above the road
 export const MODE_ACCENTS = { free: '#1f7bff', race: '#ff3b4a', heist: '#ffb02e', career: '#a060ff', taxi: '#ffc21a', kids: '#2fd36a' };
 export const DISTRICT_ACCENTS = { downtown: '#1f7bff', highway: '#ff7a1a', harbor: '#18b7c9', construction: '#ffb02e', canyon: '#d0763a', waterfront: '#3fa9ff' };
 
-// Ground height under (x, z), ignoring nothing (decks count).
-function groundAt(game, x, z) {
-  const hit = game.physics.raycast(V(x, 400, z), DOWN, 600, game.activities.groundGroups, null);
-  return hit ? 400 - hit.timeOfImpact : 0;
+// Ground height under (x, z), cast down from `from` (decks count; a ray that starts inside a
+// collider is ignored).
+function groundAt(game, x, z, from = 160) {
+  const hit = game.physics.raycast(V(x, from, z), DOWN, from + 60, game.activities.groundGroups, null);
+  return hit && hit.timeOfImpact > 0.01 ? from - hit.timeOfImpact : 0;
 }
 
 // Road frame: nearest road point, its direction and right vector; P(f, s, h) walks along it.
@@ -196,7 +197,8 @@ function balloons(group, at) {
 
 // Keeps a camera at least `clear` m above the ground.
 function lift(game, cam, clear = 3) {
-  cam.y = Math.max(cam.y, groundAt(game, cam.x, cam.z) + clear);
+  // Only looks a little above the camera, so roofs and decks overhead never push it up.
+  cam.y = Math.max(cam.y, groundAt(game, cam.x, cam.z, cam.y + 20) + clear);
   return cam;
 }
 
@@ -276,12 +278,10 @@ export function districtShot(game, id) {
     },
     harbor: () => shot(game, V(40, 16, 880), V(180, 24, 985), null),
     construction: () => shot(game, V(560, 10, 80), V(650, 32, -40), null, { fov: 58 }),
-    canyon: () => shot(game, V(-250, 0, -1080), V(-418, 104, -1279), null, { fov: 55 }),
+    canyon: () => shot(game, V(-230, 150, -1060), V(-418, 100, -1279), null, { fov: 55 }),
     waterfront: () => shot(game, V(-780, 10, -90), V(-620, 18, 80), null, { fov: 56 }),
   };
-  const s = (S[id] || S.downtown)();
-  if (id === 'canyon') s.cam.y = Math.max(s.cam.y, groundAt(game, s.cam.x, s.cam.z) + 40);
-  return s;
+  return (S[id] || S.downtown)();
 }
 
 // Race track card: the start gantry with the grid, in the track's own conditions.
