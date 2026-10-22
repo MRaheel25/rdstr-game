@@ -37,9 +37,14 @@ export class EnergySystem {
     return (this.pressure / this.pressureMax) * 100;
   }
 
-  usePressure(amount) {
+  // V3: a small reserve (12% of the tank) is kept back for the auto landing only.
+  get reserve() {
+    return this.reserveOn ? this.pressureMax * 0.12 : 0;
+  }
+
+  usePressure(amount, { landing = false } = {}) {
     if (this.emp > 0) return false;
-    if (this.pressure < amount) return false;
+    if (this.pressure - (landing ? 0 : this.reserve) < amount) return false;
     this.pressure -= amount;
     return true;
   }

@@ -50,13 +50,26 @@ UPDATE_V3.md replaces UPDATE_V2.md Part 2. Smoke tests: `SCEN=./v3.mjs EXTRA='&m
 - [x] **V3 M2 — Sound fix and music options** (see "V3 M2 results")
 - [x] **V3 M3 — Main menu first impression** (see "V3 M3 results")
 - [x] **V3 M4 — In-game HUD** (see "V3 M4 results")
-- [ ] V3 M5 — Thruster control and safe landings
+- [x] **V3 M5 — Thruster control and safe landings** (see "V3 M5 results")
 - [ ] V3 M6 — Realistic crashes and destruction
 - [ ] V3 M7 — Race mode
 - [ ] V3 M8 — Taxi mode
 - [ ] V3 M9 — Kids, Heist, Career, saves, garage
 - [ ] V3 M10 — Polish
-- **Next:** V3 M5 (thruster control and safe landings).
+- **Next:** V3 M6 (crashes and destruction).
+
+## V3 M5 results
+- Assisted Flight (default) controls: Space lift, Shift boost, W / S pitch the nose gently (the stabiliser holds a
+  ±0.22 rad attitude instead of flipping), A / D turn in the air (yaw RCS), Q / E an optional barrel roll that always
+  finishes level and is cancelled if the landing is less than 0.9 s away. The car is always held level otherwise.
+- Auto landing: when the predicted touchdown (landing preview ray-cast) is < 0.75 s away and the car sinks faster than
+  6.5 m/s, a hover burst caps the sink rate; the stabiliser levels harder in the last 0.9 s.
+- Pressure reserve: in Assisted Flight 12% of the COPV tank is held back; only the auto landing may use it
+  (`EnergySystem.usePressure(amount, { landing: true })`).
+- A landing on the wheels in Assisted Flight is capped at 2 damage (`Game.onPlayerImpact`); walls and Pro Flight
+  crashes still hurt. Pro Flight keeps full manual control with gentle stabilisation.
+- Scripted test (45 m up, 30 m/s, tilted 0.6 rad): Assisted touched down at -6.7 m/s, upright, 0% damage, 41% COPV
+  left; Pro Flight hit at -29 m/s and lost 13% chassis.
 
 ## V3 M4 results
 - One dash stack bottom right (`#dash`, fonts and colours from the new menu): a large speedometer (single thick 240°

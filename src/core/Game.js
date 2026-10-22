@@ -419,6 +419,9 @@ export class Game {
   onPlayerImpact(v, info) {
     const s = info.strength;
     let dmg = Math.max(0, s - 5) * 1.25;
+    // V3: in Assisted Flight a landing on the wheels never does heavy damage.
+    const landing = info.normal && Math.abs(info.normal.y) > 0.7 && v.up.y > 0.7 && v.lastAirTime > 0.3 && v.time - (v.landTime || -9) < 0.6;
+    if (v.flightAssist && landing) dmg = Math.min(dmg, 2);
     if (info.other && info.other.kind === 'vehicle') dmg *= 0.6;
     if (info.roof) dmg += 12;
     v.damage(dmg);
@@ -756,32 +759,36 @@ export class Game {
     const i = this.input;
     const assist = this.settings.get('flightAssist') !== false;
     v.flightAssist = assist;
+    v.energy.reserveOn = assist;
     const air = v.groundedCount === 0 && v.airTime > 0.1;
-    v.airAssist = { on: air, strength: assist ? 1 : 0.12, landing: 0 };
+    const prevLanding = v.airAssist ? v.airAssist.landing : 0;
+    v.airAssist = { on: air, strength: assist ? 1 : 0.12, landing: prevLanding, pitch: 0, autoLand: assist };
     if (!air) {
       this.maneuver = null;
       return;
     }
     if (!assist) return;
-    // One-key moves.
-    if (!this.maneuver) {
-      const k = i.pressed('rollLeft') ? ['roll', -1] : i.pressed('rollRight') ? ['roll', 1] : i.pressed('throttle') ? ['pitch', 1] : i.pressed('brake') ? ['pitch', -1] : null;
-      if (k) this.maneuver = { axis: k[0], dir: k[1], angle: 0, t: 0 };
+    // Q / E: optional barrel roll trick that always finishes level.
+    if (!this.maneuver && (i.pressed('rollLeft') || i.pressed('rollRight'))) {
+      this.maneuver = { axis: 'roll', dir: i.pressed('rollLeft') ? -1 : 1, angle: 0, t: 0 };
     }
+    // W / S: pitch the nose gently (the stabiliser holds that attitude); A / D: turn in the air.
+    v.airAssist.pitch = (i.down('throttle') ? -0.22 : 0) + (i.down('brake') ? 0.22 : 0);
     c.pitch = 0;
     c.roll = 0;
+    c.yaw = this.input.axes.steer;
     const m = this.maneuver;
     if (m) {
-      // Integrate the rotation about the manoeuvre axis (local frame).
       const av = v.body.angvel();
       const w = new THREE.Vector3(av.x, av.y, av.z).applyQuaternion(v.quaternion.clone().invert());
-      m.angle += Math.abs(m.axis === 'roll' ? w.z : w.x) * realDt;
+      m.angle += Math.abs(w.z) * realDt;
       m.t += realDt;
-      if (m.axis === 'roll') c.roll = m.dir;
-      else c.pitch = m.dir;
-      if (m.angle > Math.PI * 2 - 0.7 || m.t > 3) this.maneuver = null;
+      c.roll = m.dir;
+      // Never start / continue a roll that cannot finish before landing.
+      const tl = v.airAssist.landing;
+      if (m.angle > Math.PI * 2 - 0.7 || m.t > 3 || (tl > 0 && tl < 0.9)) this.maneuver = null;
     }
-    v.airAssist.strength = m ? 0 : 1;
+    v.airAssist.strength = this.maneuver ? 0 : 1;
   }
 
   // Landing preview: ballistic path of the car until it hits the ground, with a ring marker
@@ -829,6 +836,7 @@ export class Game {
     }
     if (!hit) {
       mk.visible = false;
+      if (v.airAssist) v.airAssist.landing = 0;
       return;
     }
     mk.visible = true;

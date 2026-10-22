@@ -136,4 +136,39 @@ export default {
     await shot('top');
     await page.evaluate(() => { __game.settings.setHud('position', 'bottom'); __game.hud.applyLayout(); });
   },
+  // M5: big jump (45 m up, 30 m/s, tilted) with Assisted vs Pro Flight.
+  async m5({ page, sleep, shot, log }) {
+    await page.evaluate(() => __game.startPlay({ district: 'downtown' }));
+    await sleep(1500);
+    await page.keyboard.press('Enter');
+    await sleep(2000);
+    const res = await page.evaluate(() => {
+      const g = __game;
+      const out = {};
+      for (const mode of ['assist', 'pro']) {
+        g.settings.set('flightAssist', mode === 'assist');
+        g.restorePlayer();
+        g.test.teleport(2.6, 45, 300, 0, 30);
+        g.player.body.setRotation({ x: 0, y: 0, z: Math.sin(0.3), w: Math.cos(0.3) }, true);
+        const hp0 = g.player.hp;
+        let maxSink = 0;
+        let landed = null;
+        let pMin = 999;
+        g.test.simulate(7, (c, t) => {
+          g.flightAssist(1 / 120);
+          const v = g.player;
+          if (v.groundedCount === 0) maxSink = Math.max(maxSink, -v.velocity.y);
+          if (landed === null && v.groundedCount >= 3 && t > 0.3) landed = { t: +t.toFixed(2), vy: +v.velocity.y.toFixed(1), upY: +v.up.y.toFixed(2) };
+          pMin = Math.min(pMin, v.energy.pressurePct);
+        });
+        const v = g.player;
+        out[mode] = { hpLoss: +((hp0 - v.hp) / v.maxHp * 100).toFixed(1), landed, endUp: +v.up.y.toFixed(2), maxSinkInAir: +maxSink.toFixed(1), minPressurePct: Math.round(pMin) };
+      }
+      g.settings.set('flightAssist', true);
+      return JSON.stringify(out);
+    });
+    log('jump', res);
+    await sleep(1000);
+    await shot('after');
+  },
 };

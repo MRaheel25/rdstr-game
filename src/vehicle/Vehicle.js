@@ -519,6 +519,8 @@ export class Vehicle {
     if (grounded === 0 && aa && aa.on && aa.strength > 0 && !this.wrecked && !(energy && energy.emp)) {
       const s = aa.strength * (aa.landing > 0 && aa.landing < 0.9 ? 2.2 : 1);
       _tmp.set(0, 1, 0);
+      // Target attitude: level, or a gentle nose up / down while W / S are held (Assisted).
+      if (aa.pitch && !(aa.landing > 0 && aa.landing < 0.8)) _tmp.applyAxisAngle(_right, aa.pitch);
       const err = _tmp2.crossVectors(_up, _tmp); // axis * sin(angle) that rotates up -> world up
       if (_up.y < 0) {
         // Upside down: full push, rolling about the nose if exactly inverted.
@@ -533,6 +535,21 @@ export class Vehicle {
       const tq = err.multiplyScalar(9).addScaledVector(w, -3.2).multiplyScalar(I * s * dt);
       body.applyTorqueImpulse(rv(tq), true);
     }
+    // V3 auto landing (Assisted): close to the ground and falling fast -> short hover burst
+    // that limits the sink rate, paid from the reserve if needed.
+    if (grounded === 0 && aa && aa.on && aa.autoLand && energy && !this.wrecked && aa.landing > 0 && aa.landing < 0.75) {
+      const vy = this.velocity.y;
+      const maxSink = 6.5;
+      if (vy < -maxSink) {
+        const dv = Math.min(-maxSink - vy, 30 * dt);
+        if (energy.usePressure(energy.cost.hover * dt * 1.3, { landing: true })) {
+          _imp.set(0, this.mass * dv, 0);
+          body.applyImpulse(rv(_imp), true);
+          this.thrust.hover = 1;
+          this.autoLanding = true;
+        }
+      }
+    }
 
     // Airborne bookkeeping.
     if (grounded === 0) {
@@ -546,6 +563,8 @@ export class Vehicle {
     } else {
       if (this.airTime > 0.35 && wasGrounded === 0) {
         this.lastAirTime = this.airTime;
+        this.landTime = this.time;
+        this.autoLanding = false;
         for (const fn of this.landListeners) fn(this, this.airTime, this.velocity.y);
       }
       if (this.airTime > 0) this.airTime = 0;
