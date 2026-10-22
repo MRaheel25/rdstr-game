@@ -92,7 +92,7 @@ People:
 
 GRAFIGATOR LANDMARK (must look built-in, not like a watermark):
 - A distinctive modern building in the Downtown or Shopping District on a busy main road the player passes often (and near the default spawn), called "GRAFIGATOR Design Studio".
-- The logo file is in `reference/grafigator-logo.svg`. Turn it into a 3D illuminated sign on the building facade: extruded or layered letters/shape with depth, lit from behind with a soft glow at night and real shadows in daylight.
+- The logo file is in `reference/grafigator-logo.svg`. It is the icon mark only, two white filled paths (no text), so parse it with Three.js SVGLoader and extrude the paths directly. Pair it with the word "GRAFIGATOR" in clean bold 3D letters next to or under the mark. Turn it into a 3D illuminated sign on the building facade: extruded or layered letters/shape with depth, lit from behind with a soft glow at night and real shadows in daylight.
 - Use the brand colors lime yellow #e7f75b and light teal #54dc9d as accent lighting and trim on the building.
 - Ground floor: glass storefront with a studio interior visible through the windows (desks, screens, design posters), plus a smaller logo on the glass door.
 - Add the Grafigator logo on 2 or 3 billboards around the city as in-world advertising, styled like the other fictional brands.
