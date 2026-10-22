@@ -18,7 +18,7 @@ const HAIR = [0x1a1410, 0x3a2414, 0x6a4a2a, 0xc8a060, 0x2a2a2a, 0x8a3a1a];
 
 // Part ids (aPart.x): 0 torso, 1 left leg, 2 right leg, 3 left arm, 4 right arm, 5 head.
 // Material slot (aPart.y): 0 shirt, 1 pants, 2 skin, 3 hair, 4 shoes.
-function personGeometry() {
+export function personGeometry() {
   const parts = [];
   const add = (geo, part, slot) => {
     const g = geo.index ? geo.toNonIndexed() : geo;
@@ -49,7 +49,7 @@ function personGeometry() {
   return mergeGeometries(parts, false);
 }
 
-function personMaterial() {
+export function personMaterial() {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.75, metalness: 0 });
   m.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader

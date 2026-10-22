@@ -236,4 +236,33 @@ export default {
     await shot('racing');
     log(await page.evaluate(() => JSON.stringify({ state: __game.activities.active && __game.activities.active.race.state, pos: __game.activities.active && __game.activities.active.race.positionOf(__game.activities.active.race.player) })));
   },
+  // M8: taxi shift: passenger waiting, pick up, drive (teleport near), drop off, results.
+  async m8({ page, sleep, shot, log }) {
+    await page.evaluate(() => __game.startTaxi());
+    await sleep(1500);
+    await page.keyboard.press('Enter');
+    await sleep(3000);
+    await page.keyboard.press('h');
+    const pax = await page.evaluate(() => {
+      const t = __game.taxi;
+      const p = t.pax.pos;
+      // Park next to the passenger, facing them.
+      __game.activities.teleport({ x: p.x - 6, y: 0, z: p.z }, -Math.PI / 2);
+      return { active: t.active, pax: t.pax.name, d: Math.round(Math.hypot(p.x, p.z)) };
+    });
+    log('taxi', JSON.stringify(pax));
+    await sleep(2000);
+    await shot('pickup');
+    await page.waitForFunction(() => __game.taxi.pax && __game.taxi.pax.phase === 'riding', null, { timeout: 60000 });
+    const ride = await page.evaluate(() => { const p = __game.taxi.pax; return { dest: p.destName, dist: Math.round(p.dist), fare: p.fare, route: __game.nav.route.length }; });
+    log('riding', JSON.stringify(ride));
+    await sleep(1500);
+    await shot('riding');
+    await page.evaluate(() => { const d = __game.taxi.pax.dest; __game.activities.teleport({ x: d.x, y: 0, z: d.z }, 0); });
+    await page.waitForFunction(() => __game.taxi.fares >= 1, null, { timeout: 60000 });
+    log('fares', await page.evaluate(() => JSON.stringify({ fares: __game.taxi.fares, earned: __game.taxi.earned, next: __game.taxi.pax && __game.taxi.pax.phase })));
+    await page.evaluate(() => { __game.taxi.time = 0.5; });
+    await sleep(2500);
+    await shot('results');
+  },
 };

@@ -53,10 +53,27 @@ UPDATE_V3.md replaces UPDATE_V2.md Part 2. Smoke tests: `SCEN=./v3.mjs EXTRA='&m
 - [x] **V3 M5 — Thruster control and safe landings** (see "V3 M5 results")
 - [x] **V3 M6 — Realistic crashes and destruction** (see "V3 M6 results")
 - [x] **V3 M7 — Race mode** (see "V3 M7 results")
-- [ ] V3 M8 — Taxi mode
+- [x] **V3 M8 — Taxi mode** (see "V3 M8 results")
 - [ ] V3 M9 — Kids, Heist, Career, saves, garage
 - [ ] V3 M10 — Polish
-- **Next:** V3 M8 (taxi mode).
+- **Stopped here by request after M8.** Not started: M9 (Kids Mode challenges, Heist, Career with 100 tasks, save
+  system upgrades, Garage paints / upgrades) and M10 (polish, loading tips, final pass). Kids Mode currently exists only
+  as the basic version from M1 (no police, no damage, speed cap); Heist / Career mode cards open the existing mission list.
+- **Next:** V3 M9, starting with Kids Mode challenges.
+
+## V3 M8 results
+- `game/Taxi.js`: 10-minute shift (PLAY > TAXI, or stop at one of 8 taxi stands shown on the minimap and map). A
+  passenger (one instance of the pedestrian mesh, waving) waits at the kerb 140-420 m away with a yellow light column and
+  a GPS route; stop within 9 m to pick up. The destination is a road point 500-1500 m away, preferring another district,
+  with a green column and route. Stop within 14 m to drop off.
+- Pay: fare $12 + $0.055 per metre, a time bonus of up to 60% for beating the par time, and a tip starting at 30% that
+  drops with every crash (and big jumps) and slowly recovers with smooth driving. Paid as cash + rep.
+- Passenger subtitles (radio line with their name): destination on pickup, excited at high speed, scared after crashes,
+  shocked in the air, happy (or annoyed when late) on arrival. HUD objective shows fares, earnings, current job, tip and
+  the shift timer; the shift ends with a results screen (fares, earnings, tips, best fare, stars). TAXI roof light on
+  the car during the shift.
+- Verified headless: shift starts, pickup -> ride to the Shopping District (646 m, $48 fare) -> drop-off paid $90 ->
+  next passenger waiting -> results at the end of the shift.
 
 ## V3 M7 results
 - 6 tracks: Highway Ring Sprint (golden hour), Downtown Circuit (noon, clear), Canyon Drift Run (morning, fog) plus

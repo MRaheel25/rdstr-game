@@ -38,6 +38,7 @@ import { Menu } from '../ui/Menu.js';
 import { XRay } from '../fx/XRay.js';
 import { Services } from '../game/Services.js';
 import { Navigation } from '../game/Navigation.js';
+import { Taxi } from '../game/Taxi.js';
 import { Destruction, dentModel } from '../fx/Destruction.js';
 import { MapView } from '../ui/MapView.js';
 import { Pedestrians } from '../world/Pedestrians.js';
@@ -155,6 +156,7 @@ export class Game {
     this.physics.world.step(this.physics.eventQueue);
     this.score = new StyleScore(this);
     this.activities = new ActivityManager(this, this.progress, this.score);
+    this.taxi = new Taxi(this);
     this.inputLock = false;
     this.menu = new Menu(this);
     this.xray = new XRay(this);
@@ -503,6 +505,7 @@ export class Game {
     this.services.update(realDt);
     this.destruction.update(dt);
     this.nav.update(realDt);
+    this.taxi.update(realDt);
     this.updateLandingPreview();
     this.peds.update(dt, realDt);
     this.pursuitActive = this.heat.phase !== 'none';
@@ -904,6 +907,11 @@ export class Game {
     if (v.airAssist) v.airAssist.landing = t;
   }
 
+  // V3 Taxi mode from the menu: start downtown, the shift begins after the intro.
+  startTaxi() {
+    this.startPlay({ district: 'downtown', mode: 'taxi' });
+  }
+
   // V2: time of day + weather (saved, applied to sky, lights, fog, rain, roads).
   setConditions(tod, weather) {
     this.settings.set('tod', tod);
@@ -1004,11 +1012,13 @@ export class Game {
     if (this.pendingActivity) {
       const a = this.pendingActivity;
       this.pendingActivity = null;
-      if (this.progress.rep >= a.rep && this.progress.districtOpen(a.district)) this.activities.openBriefing(a);
+      this.activities.openBriefing(a);
     }
+    if (this.mode === 'taxi' && this.taxi) this.taxi.startShift();
   }
 
   quitToTitle() {
+    if (this.taxi && this.taxi.active) this.taxi.stop();
     this.activities.quit();
     this.activities.ui.close();
     this.police.clearAll();
