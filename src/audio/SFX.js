@@ -93,6 +93,18 @@ export class SFX {
     o.dispose(3);
   }
 
+  // Storm: a crack followed by a long rolling rumble.
+  thunder(strength = 1) {
+    const e = this.e;
+    if (!e.ok || !this.gate('thunder', 1)) return;
+    const o = e.oneShotOut(null, { reverb: 1 });
+    const at = 0.25 + Math.random() * 1.2;
+    this.noiseBurst(o.input, { kind: 'white', type: 'highpass', f0: 1200, q: 0.5, peak: 0.25 * strength, attack: 0.003, decay: 0.25, at });
+    this.noiseBurst(o.input, { kind: 'brown', type: 'lowpass', f0: 420, f1: 60, q: 0.6, peak: 1.0 * strength, attack: 0.08, decay: 2.6, at: at + 0.05 });
+    this.noiseBurst(o.input, { kind: 'brown', type: 'lowpass', f0: 200, q: 0.5, peak: 0.6 * strength, attack: 0.4, decay: 2.2, at: at + 0.9 });
+    o.dispose(at + 5);
+  }
+
   land(heaviness, pos) {
     const e = this.e;
     if (!e.ok || !this.gate('land', 0.1)) return;

@@ -8,10 +8,68 @@ import { UPGRADES, PAINT_COSTS, DISTRICT_UNLOCKS, SLOT_COUNT } from '../game/Pro
 import { PAINTS } from '../vehicle/models/CarMaterials.js';
 import { stars } from './ActivityUI.js';
 import { clamp } from '../util/math.js';
+import { DISTRICTS } from '../world/Layout.js';
+import { TODS, WEATHERS, makePreset } from '../world/Environment.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const TYPE = { getaway: 'GETAWAY', datarun: 'DATA RUN', bounty: 'BOUNTY', skygap: 'SKY GAP', ghost: 'GHOST PROTOCOL' };
-const TOD = [['night', 'Night'], ['dusk', 'Dusk'], ['rain', 'Rainy Night']];
+const DISTRICT_BLURB = {
+  downtown: 'Glass towers, neon and the GRAFIGATOR studio.', highway: 'Elevated six-lane ring around the city.',
+  harbor: 'Containers, cranes and the piers.', construction: 'Half-built towers and the Broken Bridge.',
+  canyon: 'Hairpins, tunnels and the lookout.', waterfront: 'The bay promenade.',
+};
+const TOD_BLURB = {
+  morning: 'Low warm sun from the east, long shadows.', noon: 'Bright overhead sun. Best visibility.',
+  golden: 'Warm light, glowing paint.', sunset: 'Orange sky, city lights coming on.', night: 'Street lights and neon.',
+};
+const WEATHER_BLURB = {
+  clear: 'Dry roads, full sun.', cloudy: 'Soft light, overcast sky.', rain: 'Wet roads, spray, less grip.',
+  fog: 'Thick fog, short view.', storm: 'Heavy rain and lightning.',
+};
+
+// Sky swatch for the time / weather cards: zenith -> horizon gradient with the sun disc.
+function skyCard(p) {
+  const c = document.createElement('canvas');
+  c.width = 160;
+  c.height = 100;
+  const x = c.getContext('2d');
+  const gr = x.createLinearGradient(0, 0, 0, 100);
+  gr.addColorStop(0, p.zenith);
+  gr.addColorStop(0.7, p.horizon);
+  gr.addColorStop(1, p.glow);
+  x.fillStyle = gr;
+  x.fillRect(0, 0, 160, 100);
+  const sy = 92 - Math.min(80, p.elev * 1.3);
+  const sg = x.createRadialGradient(110, sy, 0, 110, sy, p.disk > 0.5 ? 34 : 18);
+  sg.addColorStop(0, '#' + new THREE.Color(p.sun).getHexString());
+  sg.addColorStop(0.25, 'rgba(255,255,255,0.35)');
+  sg.addColorStop(1, 'rgba(255,255,255,0)');
+  x.globalAlpha = 1 - p.cloudCover * 0.6;
+  x.fillStyle = sg;
+  x.fillRect(0, 0, 160, 100);
+  x.globalAlpha = p.cloudCover * 0.75;
+  x.fillStyle = p.cloudLit;
+  for (let i = 0; i < 7; i++) {
+    x.beginPath();
+    x.ellipse(15 + i * 24, 26 + (i % 3) * 9, 26, 7, 0, 0, Math.PI * 2);
+    x.fill();
+  }
+  x.globalAlpha = 1;
+  x.fillStyle = 'rgba(8,10,16,0.85)';
+  for (let i = 0; i < 12; i++) x.fillRect(i * 14, 100 - (18 + ((i * 37) % 30)), 12, 40);
+  if (p.rain) {
+    x.strokeStyle = 'rgba(200,220,255,0.35)';
+    for (let i = 0; i < 60; i++) {
+      const rx = (i * 53) % 160;
+      const ry = (i * 29) % 100;
+      x.beginPath();
+      x.moveTo(rx, ry);
+      x.lineTo(rx - 3, ry + 9);
+      x.stroke();
+    }
+  }
+  return c.toDataURL();
+}
 const KEY_NAMES = {
   ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Space: 'SPACE', ShiftLeft: 'L-SHIFT', ShiftRight: 'R-SHIFT',
   ControlLeft: 'L-CTRL', ControlRight: 'R-CTRL', AltLeft: 'L-ALT', AltRight: 'R-ALT', Escape: 'ESC', Enter: 'ENTER', Tab: 'TAB', Backspace: 'BKSP',
@@ -185,6 +243,7 @@ export class Menu {
       list.appendChild(el);
       this.items.push(it);
       this.refresh(it);
+      if (it.img) el.style.setProperty('--card-img', `url("${it.img}")`);
       const idx = this.items.length - 1;
       el.addEventListener('mouseenter', () => {
         if (this.index !== idx) {
@@ -420,9 +479,84 @@ export class Menu {
     return `<div class="step-dots">${[0, 1, 2, 3].map((k) => `<i class="${k <= i ? 'on' : ''}"></i>`).join('')}</div>`;
   }
 
-  // Filled in by the V2 lighting milestone (district / time / weather cards).
+  // Step 2: district start point (cards with a still rendered from the game).
   showPlayStep2() {
-    this.game.startPlay({});
+    const g = this.game;
+    const p = g.progress;
+    this.previews = this.previews || {};
+    const items = DISTRICTS.map((d) => {
+      const open = p.districtOpen(d.id) || d.id === 'waterfront';
+      if (!this.previews[d.id]) {
+        try {
+          this.previews[d.id] = g.renderPreview(g.world.districtStart(d.id));
+        } catch (e) {
+          this.previews[d.id] = null;
+        }
+      }
+      const rep = (DISTRICT_UNLOCKS.find((u) => u.id === d.id) || {}).rep;
+      return {
+        label: d.name.toUpperCase(), sub: open ? DISTRICT_BLURB[d.id] || '' : `LOCKED · ${rep || '?'} REP`, disabled: !open,
+        cls: `card district-${d.id}`, img: this.previews[d.id],
+        action: () => {
+          this.playSetup.district = d.id;
+          this.showPlayStep3();
+        },
+      };
+    });
+    this.render(`
+      <div class="play-wrap">
+        <div class="step-head"><b>02</b><span>START DISTRICT</span>${this.stepDots(1)}</div>
+        <div class="menu-list cards"></div>
+        <div class="menu-foot">←→ SELECT · ENTER CONFIRM · ESC BACK</div>
+      </div>`, items, { cls: 'play-screen', horizontal: true });
+    this.onBack = () => this.showPlay();
+  }
+
+  // Step 3: time of day.
+  showPlayStep3() {
+    const cur = this.game.settings.get('tod') || 'noon';
+    const ids = Object.keys(TODS);
+    const items = ids.map((id) => {
+      const t = makePreset(id, 'clear');
+      return {
+        label: TODS[id].label.toUpperCase(), sub: TOD_BLURB[id], cls: `card tod-${id}`, value: id === 'noon' ? 'DEFAULT' : null,
+        img: skyCard(t),
+        action: () => {
+          this.playSetup.tod = id;
+          this.showPlayStep4();
+        },
+      };
+    });
+    this.render(`
+      <div class="play-wrap">
+        <div class="step-head"><b>03</b><span>TIME OF DAY</span>${this.stepDots(2)}</div>
+        <div class="menu-list cards"></div>
+        <div class="menu-foot">←→ SELECT · ENTER CONFIRM · ESC BACK</div>
+      </div>`, items, { cls: 'play-screen', horizontal: true, focus: Math.max(0, ids.indexOf(cur)) });
+    this.onBack = () => this.showPlayStep2();
+  }
+
+  // Step 4: weather, then drive.
+  showPlayStep4() {
+    const g = this.game;
+    const cur = g.settings.get('weather') || 'clear';
+    const ids = Object.keys(WEATHERS);
+    const items = ids.map((id) => ({
+      label: WEATHERS[id].label.toUpperCase(), sub: WEATHER_BLURB[id], cls: `card weather-${id}`,
+      img: skyCard(makePreset(this.playSetup.tod, id)),
+      action: () => {
+        const s = this.playSetup;
+        s.weather = id;
+        g.startPlay({ district: s.district, tod: s.tod, weather: s.weather });
+      },
+    }));
+    this.render(`
+      <div class="play-wrap">
+        <div class="step-head"><b>04</b><span>WEATHER</span>${this.stepDots(3)}</div>
+        <div class="menu-list cards"></div>
+        <div class="menu-foot">←→ SELECT · ENTER DRIVE · ESC BACK</div>
+      </div>`, items, { cls: 'play-screen', horizontal: true, focus: Math.max(0, ids.indexOf(cur)) });
+    this.onBack = () => this.showPlayStep3();
   }
 
   // ---- player name ---------------------------------------------------------------------------
@@ -763,6 +897,8 @@ export class Menu {
         { type: 'select', label: 'Quality', options: QUALITY_ORDER.map((q) => [q, QUALITY_PRESETS[q].label]), get: () => s.get('quality'), set: (v) => { s.set('quality', v); g.applyQuality(); } },
         { type: 'select', label: 'Resolution scale', options: [[0.5, '50%'], [0.67, '67%'], [0.75, '75%'], [0.85, '85%'], [1, '100%']], get: () => s.get('resScale') ?? 1, set: (v) => { s.set('resScale', v); g.applyQuality(); } },
         { type: 'select', label: 'Auto quality', sub: 'Drop a level if FPS stays below 45', options: onOff, get: () => s.get('autoQuality'), set: set('autoQuality') },
+        { type: 'select', label: 'Time of day', options: Object.keys(TODS).map((k) => [k, TODS[k].label]), get: () => s.get('tod') || 'noon', set: (v) => g.setConditions(v, s.get('weather') || 'clear') },
+        { type: 'select', label: 'Weather', options: Object.keys(WEATHERS).map((k) => [k, WEATHERS[k].label]), get: () => s.get('weather') || 'clear', set: (v) => g.setConditions(s.get('tod') || 'noon', v) },
       ];
     } else if (cat === 'CONTROLS') {
       items = [

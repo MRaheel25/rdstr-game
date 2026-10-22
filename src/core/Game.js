@@ -2,6 +2,8 @@
 // interpolation, time scaling (slow motion / hit stop) and the top-level state machine.
 import { loadGrafigator } from '../world/Grafigator.js';
 import * as THREE from 'three';
+
+const WEATHER_LINE = { clear: 'clear skies', cloudy: 'overcast', rain: 'rain', fog: 'thick fog', storm: 'storm warning' };
 import { Settings, QUALITY_ORDER } from './Settings.js';
 import { Input } from './Input.js';
 import { Renderer } from './Renderer.js';
@@ -132,6 +134,10 @@ export class Game {
     };
     this.setupPursuitEvents();
     this.audio = new AudioSystem(this);
+    this.world.env.onLightning = (k) => {
+      this.gfx.setFlash(0.28 * k, 0xdfe6ff);
+      this.audio.sfx.thunder(k);
+    };
     this.progress.apply(this.player);
     // Rapier only builds its query structures during step(): run one so start-up raycasts
     // (activity marker heights) see the freshly built city.
@@ -566,7 +572,7 @@ export class Game {
 
   isWet() {
     const p = this.world.env.preset;
-    return (p.rain && this.settings.get('rain')) || (p.wet ?? 1) > 1.2;
+    return !!p.rain;
   }
 
   // Driving into the bay or the canal: splash, sink, reset to the nearest road.
@@ -682,8 +688,9 @@ export class Game {
   }
 
   // ---- game flow: title -> (intro flyover) -> play; pause -> quit to title -----------------
-  startPlay({ continueStory = false, activity = null } = {}) {
+  startPlay({ continueStory = false, activity = null, district = null, tod = null, weather = null } = {}) {
     const m = this.menu;
+    if (tod || weather) this.setConditions(tod || this.settings.get('tod'), weather || this.settings.get('weather'));
     m.close();
     m.leaveShowroom();
     this.audio.setMenu(false);
@@ -691,6 +698,10 @@ export class Game {
     this.heat.clear('reset');
     this.restorePlayer();
     let spot = { x: 3.8, z: 70, yaw: 0 };
+    if (district) {
+      const d = this.world.districtStart(district);
+      spot = { x: d.position.x, y: d.position.y, z: d.position.z, yaw: d.yaw };
+    }
     const target = activity || (continueStory ? m.nextMission() : null);
     if (target) {
       // Park just before the activity's marker, facing it.
@@ -702,6 +713,71 @@ export class Game {
     this.hud.show(true);
     this.pendingActivity = activity;
     this.playIntro();
+  }
+
+  // V2: time of day + weather (saved, applied to sky, lights, fog, rain, roads).
+  setConditions(tod, weather) {
+    this.settings.set('tod', tod);
+    this.settings.set('weather', weather);
+    this.world.env.setConditions(tod, weather);
+  }
+
+  // Small still of the city rendered from the game (district cards in the play setup).
+  renderPreview(start, w = 320, h = 180) {
+    const r = this.gfx.renderer;
+    const world = this.world;
+    const cam = new THREE.PerspectiveCamera(55, r.domElement.width / r.domElement.height, 0.5, 2500);
+    const p = start.position;
+    // Steep aerial view from the outer side of the start point, so the district itself fills
+    // the frame rather than the downtown skyline behind it.
+    const out = new THREE.Vector3(p.x, 0, p.z);
+    if (out.lengthSq() < 1e4) out.set(0.4, 0, 1);
+    out.normalize();
+    cam.position.set(p.x + out.x * 60, p.y + 75, p.z + out.z * 60);
+    cam.lookAt(p.x - out.x * 30, p.y, p.z - out.z * 30);
+    cam.updateMatrixWorld();
+    cam.aspect = w / h;
+    cam.updateProjectionMatrix();
+    const vis = world.gen.staticMeshes.map((m) => m.visible);
+    for (const m of world.gen.staticMeshes) m.visible = true;
+    world.env.update(0, p, cam);
+    world.props.refresh(cam.position, 1);
+    // Render into a float target and tone map on the CPU (render targets skip three's
+    // tone mapping / sRGB output, and reading the canvas back is unreliable).
+    const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.FloatType, depthBuffer: true });
+    const prevTarget = r.getRenderTarget();
+    r.setRenderTarget(rt);
+    r.render(this.scene, cam);
+    const px = new Float32Array(w * h * 4);
+    r.readRenderTargetPixels(rt, 0, 0, w, h, px);
+    r.setRenderTarget(prevTarget);
+    rt.dispose();
+    world.gen.staticMeshes.forEach((m, i) => (m.visible = vis[i]));
+    world.props.dirty = true;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    const ex = r.toneMappingExposure / 0.6;
+    const aces = (x) => {
+      x *= ex;
+      const v = (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14);
+      const l = Math.min(1, Math.max(0, v));
+      return 255 * (l <= 0.0031308 ? l * 12.92 : 1.055 * Math.pow(l, 1 / 2.4) - 0.055);
+    };
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const si = ((h - 1 - y) * w + x) * 4;
+        const di = (y * w + x) * 4;
+        img.data[di] = aces(px[si]);
+        img.data[di + 1] = aces(px[si + 1]);
+        img.data[di + 2] = aces(px[si + 2]);
+        img.data[di + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return c.toDataURL('image/jpeg', 0.8);
   }
 
   // Intro flyover of the city that ends behind the car.
@@ -726,7 +802,9 @@ export class Game {
     this.state = 'intro';
     this.hud.show(false);
     this.cameraCtl.playShot({ type: 'path', curve, lookCurve: look, duration: 6.5, fov: 55, onDone: () => this.endIntro() });
-    this.banner.show('HALCYON BAY', '2:47 AM · after the rain', 'cool', 4);
+    const TOD_LINE = { morning: '7:10 AM', noon: '12:30 PM', golden: '6:05 PM', sunset: '7:40 PM', night: '2:47 AM' };
+    const env = this.world.env.preset;
+    this.banner.show('HALCYON BAY', `${TOD_LINE[env.tod] || ''} · ${WEATHER_LINE[env.weather] || ''}`, 'cool', 4);
   }
 
   endIntro() {

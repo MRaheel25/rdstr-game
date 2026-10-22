@@ -46,11 +46,33 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 
 ## Version 2 (UPDATE_V2.md) — branch `v2-part1`
 - [x] **V2 M1 — Title screen and main menu** (see "V2 M1 results")
-- [ ] V2 M2 — Daylight, weather and lighting quality
+- [x] **V2 M2 — Daylight, weather and lighting quality** (see "V2 M2 results")
 - [ ] V2 M3 — City overhaul (roads, districts, landmarks, people, Grafigator)
 - [ ] V2 M4 — HUD, thruster control, physics and feedback
 - Part 2 (M5-M8) not started.
-- V2 smoke test: `SCEN=./v2.mjs EXTRA='&menu=1' node tools/smoke.mjs m1 screenshots/v2m1` (scenarios in `tools/v2.mjs`).
+- V2 smoke test: `SCEN=./v2.mjs EXTRA='&menu=1' node tools/smoke.mjs m<N> screenshots/v2m<N>` (scenarios `m1`..`m4` in `tools/v2.mjs`).
+- **Next:** V2 M3 (city overhaul).
+
+## V2 M2 results
+- `world/Environment.js`: lighting is now time of day x weather. `TODS` (Morning, Noon, Golden Hour, Sunset, Night) give
+  sun elevation/azimuth, sun colour/intensity, sky, fog, hemisphere fill, exposure, lamp level and a `night` factor;
+  `WEATHERS` (Clear, Cloudy, Rain, Fog, Storm) scale cloud cover, fog density, direct light, sky greying, rain, wet roads
+  and lightning. `makePreset()` merges both into the flat preset the rest of the game reads (old fields kept: `moon`,
+  `moonI`, `rain`, `wet`, `lampScale`). V1 names `night`/`dusk`/`rain` still work through `apply()`.
+- Real sun: the directional key light follows the preset's angle and colour (moon at night); the sky shader draws a sun
+  disc with Mie halo, forward-scattering glow and sunlit day clouds (city-lit clouds and stars at night).
+- Shadows: tightly fitted frustum (±55/62/75 m by shadow map size) centred ahead of the camera; low suns are clamped
+  above the horizon so the street still gets long shadows.
+- Reflections: the PMREM env map is rebuilt per preset (sunlit facades and asphalt by day, neon and sodium at night);
+  `scene.environmentIntensity` per time of day. Car paint clearcoat sharper (roughness 0.025, env 1.4).
+- Building windows glow only at night (`uNight` uniform in the facade shader); street-lamp spots, light pools and
+  cones follow the lamp level, so daylight has none. Night is readable: exposure 1.3, brighter moon/fill, lamps x1.35.
+- Wet roads only when it rains (road/sidewalk roughness and colour change, wet light streaks; dry = none).
+- Storm: random double-flicker lightning lights the scene, short screen flash and synthesized thunder (`SFX.thunder`).
+- Play setup: Mode -> District (cards with a still rendered from the game by `Game.renderPreview`, locked districts show
+  their rep) -> Time of day -> Weather (sky swatch cards) -> drive. `Game.startPlay({district, tod, weather})`,
+  `World.districtStart(id)`. Noon / Clear is the default for new players. Settings > Graphics also has Time of day
+  and Weather (applied live). The intro card shows the chosen time and weather.
 
 ## V2 M1 results
 - New visual identity (css/style.css "Menus (V2)"): graphite glass panels with cut corners, cyan->magenta signal line,

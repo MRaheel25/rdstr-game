@@ -30,4 +30,39 @@ export default {
     await shot('thanks');
     await page.evaluate(() => __game.progress.deleteSlot(0));
   },
+  // M2: play setup cards, then each time of day / weather in the city.
+  async m2({ page, sleep, shot, log }) {
+    await sleep(2000);
+    await page.evaluate(() => { __game.menu.playSetup = { mode: 'free' }; __game.menu.showPlayStep2(); });
+    await sleep(800);
+    await shot('district');
+    await page.evaluate(() => __game.menu.showPlayStep3());
+    await sleep(300);
+    await shot('tod');
+    await page.evaluate(() => { __game.menu.playSetup.tod = 'noon'; __game.menu.showPlayStep4(); });
+    await sleep(300);
+    await shot('weather');
+    await page.evaluate(() => __game.startPlay({ district: 'downtown', tod: 'noon', weather: 'clear' }));
+    await sleep(1500);
+    await page.keyboard.press('Enter');
+    await sleep(2500);
+    for (const [t, w] of [['noon', 'clear'], ['morning', 'cloudy'], ['golden', 'clear'], ['sunset', 'fog'], ['night', 'clear'], ['noon', 'storm']]) {
+      await page.evaluate(([t, w]) => __game.setConditions(t, w), [t, w]);
+      await sleep(1800);
+      await shot(`${t}_${w}`);
+    }
+    log(await page.evaluate(() => JSON.stringify({ state: __game.state, p: __game.world.env.preset.label, wet: __game.world.env.preset.wet })));
+  },
+  async m2b({ page, sleep, shot, log }) {
+    await sleep(1500);
+    log(await page.evaluate(() => JSON.stringify(['downtown', 'highway', 'harbor', 'canyon'].map((d) => __game.world.districtStart(d).position))));
+    await page.evaluate(() => { __game.menu.playSetup = { mode: 'free' }; __game.menu.showPlayStep2(); });
+    await sleep(800);
+    await shot('district');
+    await page.evaluate(() => __game.startPlay({ district: 'downtown', tod: 'noon', weather: 'clear' }));
+    await sleep(1500);
+    await page.keyboard.press('Enter');
+    await sleep(3500);
+    await shot('noon');
+  },
 };

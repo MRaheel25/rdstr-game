@@ -39,6 +39,11 @@ export class World {
 
   build(progress = () => {}) {
     this.env = new Environment(this.scene, this.ctx.renderer.renderer, this.settings);
+    this.env.onConditions = (p) => {
+      M.setConditions(p.night, p.wet);
+      if (this.props && this.props.poolMesh) this.props.poolMesh.visible = p.lampScale > 0.2;
+    };
+    M.setConditions(this.env.preset.night, this.env.preset.wet);
     const gen = new CityGenerator(this.ctx);
     gen.props = new Props(this.ctx);
     this.gen = gen;
@@ -128,6 +133,7 @@ export class World {
     }
     this.props.update(dt, focus);
     this.props.setConesVisible(preset.bloom && tod.lampScale > 0.8);
+    if (this.props.poolMesh) this.props.poolMesh.visible = tod.lampScale > 0.2;
 
     // Traffic signals.
     this.signalTimer -= dt;
@@ -155,7 +161,8 @@ export class World {
     }
 
     // Wet-road light streaks.
-    const wet = (tod.wet ?? 1) * (this.settings.get('rain') && tod.rain ? 1.25 : 1);
+    // Wet-road reflections only when it rains.
+    const wet = tod.rain ? tod.wet * (this.settings.get('rain') ? 1.25 : 1) : 0;
     this.streaks.begin(camera, this.time, wet);
     this.collectStreaks(camPos, tod);
     if (this.extraStreaks) this.extraStreaks(this.streaks);
@@ -219,6 +226,20 @@ export class World {
     const p = r.point.clone().addScaledVector(right, lane);
     p.y += 0.75;
     return { position: p, yaw: Math.atan2(-dir.x, -dir.z) };
+  }
+
+  // V2 play setup: a start point on a road inside a district (anchor = preferred spot).
+  districtStart(id) {
+    if (id === 'downtown') return { position: this.spawn.position.clone(), yaw: this.spawn.yaw };
+    const anchors = { highway: [0, 12, 600], harbor: [-60, 0, 700], construction: [760, 0, 40], canyon: [0, 0, -760], waterfront: [-660, 0, 0] };
+    const a = anchors[id] || [0, 0, 0];
+    const r = this.graph.nearest(_v.set(a[0], a[1], a[2]), (e) => {
+      if (e.kind === 'stunt') return false;
+      const m = e.points[e.points.length >> 1];
+      return districtAt(m.x, m.z).id === id;
+    });
+    if (!r) return { position: this.spawn.position.clone(), yaw: this.spawn.yaw };
+    return this.nearestRoad(new THREE.Vector3(r.x, r.y, r.z));
   }
 
   district(pos) {
