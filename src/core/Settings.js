@@ -71,8 +71,24 @@ const DEFAULTS = {
   timeOfDay: 'night', // night | dusk | rain
   cameraShake: 1,
   motionBlur: true,
+  particleAmount: 1, // multiplier on the quality preset's particle budget
+  resScale: 1, // render resolution scale (0.5 - 1)
   bindings: DEFAULT_BINDINGS,
+  padBindings: null, // filled from DEFAULT_PAD_BINDINGS
+  // V2: time of day / weather picked before play.
+  tod: 'noon', // morning | noon | golden | sunset | night
+  weather: 'clear', // clear | cloudy | rain | fog | storm
+  // V2 HUD layout (Settings > HUD).
+  hud: { speed: true, battery: true, health: true, thrusters: true, minimap: true, score: true, position: 'bottom' },
+  flightAssist: true, // Assisted Flight (true) / Pro Flight (false)
 };
+
+// Gamepad (standard mapping) button index -> action. Rebindable in Settings > Controls.
+export const DEFAULT_PAD_BINDINGS = {
+  hover: 0, handbrake: 1, rocket: 2, ghost: 3, rollLeft: 4, rollRight: 5, reset: 8, pause: 9,
+  doors: 10, camera: 11, modeDrift: 12, xray: 13, modeTrack: 14, modeFlight: 15,
+};
+export const PAD_BUTTON_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'VIEW', 'MENU', 'LS', 'RS', 'D-UP', 'D-DOWN', 'D-LEFT', 'D-RIGHT', 'HOME'];
 
 export class Settings {
   constructor() {
@@ -84,10 +100,12 @@ export class Settings {
         const saved = JSON.parse(raw);
         Object.assign(this.data, saved);
         this.data.bindings = { ...structuredClone(DEFAULT_BINDINGS), ...(saved.bindings || {}) };
+        this.data.hud = { ...DEFAULTS.hud, ...(saved.hud || {}) };
       }
     } catch (e) {
       console.info('Settings: using defaults', e);
     }
+    this.data.padBindings = { ...DEFAULT_PAD_BINDINGS, ...(this.data.padBindings || {}) };
   }
   get(key) {
     return this.data[key];
@@ -106,6 +124,10 @@ export class Settings {
   }
   resetBindings() {
     this.set('bindings', structuredClone(DEFAULT_BINDINGS));
+    this.set('padBindings', { ...DEFAULT_PAD_BINDINGS });
+  }
+  setHud(key, value) {
+    this.set('hud', { ...this.data.hud, [key]: value });
   }
   save() {
     try {

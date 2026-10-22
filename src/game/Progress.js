@@ -40,7 +40,17 @@ function defaults() {
     districts: ['downtown', 'highway'],
     stats: { takedowns: 0, evades: 0, busts: 0, bestCombo: 0, topSpeed: 0, styleTotal: 0, distance: 0 },
     lastActivity: null,
+    playerName: 'VOLT',
+    playtime: 0, // seconds
+    lastPlayed: null, // ms timestamp
   };
+}
+
+const SLOT_KEY = (i) => `rdstr.slot.${i}`;
+export const SLOT_COUNT = 3;
+
+export function levelFor(rep) {
+  return 1 + Math.floor(Math.sqrt(Math.max(0, rep) / 60));
 }
 
 export class Progress {
@@ -84,6 +94,79 @@ export class Progress {
 
   get rep() {
     return this.data.rep;
+  }
+
+  // Player level from rep (Part 2's career XP replaces this curve).
+  get level() {
+    return levelFor(this.data.rep);
+  }
+
+  get playerName() {
+    return this.data.playerName || 'VOLT';
+  }
+
+  setPlayerName(name) {
+    this.data.playerName = String(name || '').replace(/[^\w .\-]/g, '').trim().slice(0, 16).toUpperCase() || 'VOLT';
+    this.save();
+  }
+
+  // Called by the game loop while playing; persisted at most every 10 s.
+  tickPlaytime(dt) {
+    this.data.playtime = (this.data.playtime || 0) + dt;
+    this._ptAcc = (this._ptAcc || 0) + dt;
+    if (this._ptAcc > 10) {
+      this._ptAcc = 0;
+      this.data.lastPlayed = Date.now();
+      this.save();
+    }
+  }
+
+  // ---- manual save slots ------------------------------------------------------------------
+  slotInfo(i) {
+    try {
+      const raw = localStorage.getItem(SLOT_KEY(i));
+      if (!raw) return null;
+      const d = JSON.parse(raw);
+      return { name: d.playerName || 'VOLT', level: levelFor(d.rep || 0), cash: d.cash || 0, playtime: d.playtime || 0, lastPlayed: d.savedAt || d.lastPlayed || null };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  saveSlot(i) {
+    this.data.lastPlayed = Date.now();
+    this.save();
+    try {
+      localStorage.setItem(SLOT_KEY(i), JSON.stringify({ ...this.data, savedAt: Date.now() }));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  loadSlot(i) {
+    try {
+      const raw = localStorage.getItem(SLOT_KEY(i));
+      if (!raw) return false;
+      const saved = JSON.parse(raw);
+      delete saved.savedAt;
+      const d = defaults();
+      this.data = { ...d, ...saved, upgrades: { ...d.upgrades, ...(saved.upgrades || {}) }, stats: { ...d.stats, ...(saved.stats || {}) } };
+      this.data.lastPlayed = Date.now();
+      this.hasSave = true;
+      this.save();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  deleteSlot(i) {
+    try {
+      localStorage.removeItem(SLOT_KEY(i));
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   // Adds cash/rep; returns newly unlocked districts.

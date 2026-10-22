@@ -203,7 +203,7 @@ export class Renderer {
 
   applyQuality() {
     const p = this.settings.preset;
-    this.pixelRatio = Math.min(2, Math.min(window.devicePixelRatio || 1, 2) * p.pixelRatio);
+    this.pixelRatio = Math.min(2, Math.min(window.devicePixelRatio || 1, 2) * p.pixelRatio * (this.settings.get('resScale') ?? 1));
     this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.shadowMap.enabled = p.shadows;
     this.smaaPass.enabled = p.smaa;

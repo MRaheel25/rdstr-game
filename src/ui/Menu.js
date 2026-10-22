@@ -1,9 +1,10 @@
 // Menus: title screen (rotating Roadster in the showroom, glitch title), mission and race
 // lists, Garage (paint, upgrades, stat bars), Settings (graphics, audio, gameplay, key
 // rebinding, career reset), Pause and Controls. Keyboard, mouse and gamepad navigation.
+import * as THREE from 'three';
 import { GarageScene } from './GarageScene.js';
-import { ACTION_LABELS, QUALITY_PRESETS, QUALITY_ORDER } from '../core/Settings.js';
-import { UPGRADES, PAINT_COSTS, DISTRICT_UNLOCKS } from '../game/Progress.js';
+import { ACTION_LABELS, QUALITY_PRESETS, QUALITY_ORDER, PAD_BUTTON_NAMES, DEFAULT_PAD_BINDINGS } from '../core/Settings.js';
+import { UPGRADES, PAINT_COSTS, DISTRICT_UNLOCKS, SLOT_COUNT } from '../game/Progress.js';
 import { PAINTS } from '../vehicle/models/CarMaterials.js';
 import { stars } from './ActivityUI.js';
 import { clamp } from '../util/math.js';
@@ -68,8 +69,8 @@ export class Menu {
     let handled = true;
     if (k === 'ArrowUp' || k === 'KeyW') this.move(-1);
     else if (k === 'ArrowDown' || k === 'KeyS') this.move(1);
-    else if (k === 'ArrowLeft' || k === 'KeyA') this.adjust(-1);
-    else if (k === 'ArrowRight' || k === 'KeyD') this.adjust(1);
+    else if (k === 'ArrowLeft' || k === 'KeyA') this.horizontal ? this.move(-1) : this.adjust(-1);
+    else if (k === 'ArrowRight' || k === 'KeyD') this.horizontal ? this.move(1) : this.adjust(1);
     else if (k === 'Enter' || k === 'NumpadEnter' || k === 'Space') this.activate();
     else if (k === 'Escape' || k === 'Backspace') this.back();
     else handled = false;
@@ -91,8 +92,8 @@ export class Menu {
     const edge = (k) => now[k] && (!prev[k] || this.padRepeat <= 0);
     if (edge('up')) this.move(-1);
     else if (edge('down')) this.move(1);
-    else if (edge('left')) this.adjust(-1);
-    else if (edge('right')) this.adjust(1);
+    else if (edge('left')) this.horizontal ? this.move(-1) : this.adjust(-1);
+    else if (edge('right')) this.horizontal ? this.move(1) : this.adjust(1);
     if (now.up || now.down || now.left || now.right) {
       if (!(prev.up || prev.down || prev.left || prev.right)) this.padRepeat = 0.4;
       else if (this.padRepeat <= 0) this.padRepeat = 0.12;
@@ -161,8 +162,10 @@ export class Menu {
 
   // ---- rendering -------------------------------------------------------------------------------
   // items: { type: 'button'|'slider'|'select'|'bind'|'header', label, sub, action, get, set, options, disabled }
-  render(html, items, { focus = 0, cls = '' } = {}) {
+  render(html, items, { focus = 0, cls = '', horizontal = false } = {}) {
     this.root.className = `menu ${cls}`;
+    this.horizontal = horizontal;
+    this.capturing = false;
     // Buttons held while a screen opens must be released before they act again.
     this.padPrev = { up: true, down: true, left: true, right: true, a: true, b: true, start: true };
     this.root.innerHTML = html;
@@ -214,7 +217,7 @@ export class Menu {
 
   refresh(it) {
     const el = it.el;
-    const label = `<span class="mi-label">${esc(it.label)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>`;
+    const label = `${it.num ? `<span class="mi-num">${it.num}</span>` : ''}<span class="mi-label">${esc(it.label)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>`;
     if (it.type === 'slider') {
       const v = Math.round(it.get() * 100);
       if (!el.querySelector('input')) el.innerHTML = `${label}<span class="mi-value"><input type="range" min="0" max="100" step="1"><b></b></span>`;
@@ -267,6 +270,7 @@ export class Menu {
       this.garage.update(realDt, this.game.camera);
       // Keep the borrowed model's lights / wheels animating at rest.
       this.game.playerVisual.update(realDt, this.game.player);
+      if (this.screen === 'title') this.updateHotspots();
     }
   }
 
@@ -274,10 +278,14 @@ export class Menu {
   careerLine() {
     const p = this.game.progress;
     const done = Object.values(p.data.missions).filter((m) => m.done).length;
-    return `<div class="career"><span>$${p.cash.toLocaleString()}</span><span>${p.rep.toLocaleString()} REP</span><span>${done}/10 MISSIONS</span></div>`;
+    return `<div class="career"><span>$${p.cash.toLocaleString()}</span><span>${p.rep.toLocaleString()} REP</span><span>LV ${p.level}</span><span>${done}/10 JOBS</span></div>`;
   }
 
-  showTitle() {
+  logoHtml() {
+    return `<div class="logo-wrap"><div class="title-logo" data-text="RDSTR">RDSTR<i class="sweep"></i></div><div class="title-sub">// COLD GAS PURSUIT</div></div>`;
+  }
+
+  showTitle(focus = 0) {
     const g = this.game;
     this.screen = 'title';
     g.state = 'title';
@@ -286,21 +294,87 @@ export class Menu {
     const items = [];
     if (p.hasSave || p.rep > 0 || Object.keys(p.data.missions).length) items.push({ label: 'CONTINUE', sub: this.nextJobText(), action: () => g.startPlay({ continueStory: true }) });
     items.push(
-      { label: 'FREE ROAM', sub: 'Halcyon Bay, after the rain', action: () => g.startPlay({}) },
-      { label: 'MISSIONS', sub: 'Jobs for CIPHER', action: () => this.showList('mission', 'title') },
-      { label: 'STREET RACES', sub: 'Ring · Downtown · Canyon', action: () => this.showList('race', 'title') },
+      { label: 'PLAY', sub: 'Choose mode, district, time and weather', action: () => this.showPlay() },
       { label: 'GARAGE', sub: 'Paint and upgrades', action: () => this.showGarage('title') },
-      { label: 'SETTINGS', sub: 'Graphics, audio, controls', action: () => this.showSettings('title') },
+      { label: 'PLAYER NAME', sub: p.playerName, action: () => this.showName() },
+      { label: 'SETTINGS', sub: 'Sound, VFX, graphics, controls, HUD', action: () => this.showSettings('title') },
+      { label: 'GAME INFO', sub: 'Story, controls, modes, credits', action: () => this.showInfo() },
+      { label: 'SAVE GAMES', sub: '3 slots', action: () => this.showSaves('title') },
+      { label: 'EXIT', action: () => this.showExit(), cls: 'exit' },
     );
+    items.forEach((it, i) => (it.num = String(i + 1).padStart(2, '0')));
+    if (typeof focus === 'string') focus = Math.max(0, items.findIndex((it) => it.label === focus));
     this.render(`
       <div class="title-col">
-        <div class="title-logo" data-text="RDSTR">RDSTR</div>
-        <div class="title-sub">// COLD GAS PURSUIT</div>
+        ${this.logoHtml()}
+        <div class="player-tag"><span>DRIVER</span><b>${esc(p.playerName)}</b></div>
         <div class="menu-list"></div>
         ${this.careerLine()}
-        <div class="menu-foot">↑↓ SELECT · ENTER CONFIRM · <span class="pad">Ⓐ / Ⓑ</span></div>
-      </div>`, items, { cls: 'title-screen' });
+        <div class="menu-foot">↑↓ SELECT · ENTER CONFIRM · DRAG CAR TO ROTATE · SCROLL TO ZOOM</div>
+      </div>
+      <div class="hotspots">
+        <button data-hot="doors"><i></i><span>DOORS</span></button>
+        <button data-hot="roof"><i></i><span>ROOF</span></button>
+        <button data-hot="lights"><i></i><span>LIGHTS</span></button>
+        <button data-hot="thrusters"><i></i><span>THRUSTERS</span></button>
+      </div>`, items, { cls: 'title-screen', focus });
+    this.bindHotspots();
     this.onBack = null;
+  }
+
+  bindHotspots() {
+    for (const b of this.root.querySelectorAll('.hotspots button')) {
+      b.addEventListener('pointerdown', (e) => e.stopPropagation());
+      b.addEventListener('click', () => {
+        this.garage.toggle(b.dataset.hot);
+        this.sound('click');
+        this.syncHotspots();
+      });
+    }
+    this.syncHotspots();
+  }
+
+  syncHotspots() {
+    const h = this.garage.hot || {};
+    const m = this.game.playerVisual;
+    for (const b of this.root.querySelectorAll('.hotspots button')) {
+      const k = b.dataset.hot;
+      const on = k === 'doors' ? m.state.doorTarget > 0.5 : !!h[k];
+      b.classList.toggle('on', on);
+    }
+  }
+
+  // Hotspot anchors in car-local space (front is -z) and their outward normals.
+  updateHotspots() {
+    const el = this.root.querySelector('.hotspots');
+    if (!el || !this.garage.active) return;
+    const cam = this.game.camera;
+    const root = this.game.playerVisual.root;
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const anchors = {
+      doors: [[0.95, 0.3, -0.1], [1, 0, 0]], roof: [[0, 0.72, 0.2], [0, 1, 0]],
+      lights: [[0.62, 0.14, -2.0], [0.3, 0, -1]], thrusters: [[0, 0.15, 2.2], [0, 0, 1]],
+    };
+    const p = this._hp || (this._hp = new THREE.Vector3());
+    const n = this._hn || (this._hn = new THREE.Vector3());
+    const toCam = this._hc || (this._hc = new THREE.Vector3());
+    for (const b of el.children) {
+      const [pos, nrm] = anchors[b.dataset.hot];
+      p.set(...pos).applyMatrix4(root.matrixWorld);
+      n.set(...nrm).transformDirection(root.matrixWorld);
+      toCam.copy(cam.position).sub(p).normalize();
+      const facing = n.dot(toCam);
+      // Mirror side hotspots to the visible side.
+      if (b.dataset.hot === 'doors' && facing < 0) {
+        p.set(-pos[0], pos[1], pos[2]).applyMatrix4(root.matrixWorld);
+      }
+      const vis = b.dataset.hot === 'doors' ? 1 : clamp((facing + 0.15) * 3, 0, 1);
+      p.project(cam);
+      b.style.transform = `translate(${((p.x + 1) / 2) * W}px, ${((1 - p.y) / 2) * H}px)`;
+      b.style.opacity = vis.toFixed(2);
+      b.style.pointerEvents = vis > 0.3 ? 'auto' : 'none';
+    }
   }
 
   nextJobText() {
@@ -312,6 +386,201 @@ export class Menu {
     const p = this.game.progress;
     return this.game.activities.defs.find((d) => d.kind === 'mission' && !(p.data.missions[d.id] && p.data.missions[d.id].done) && p.rep >= d.rep && p.districtOpen(d.district))
       || null;
+  }
+
+  // ---- PLAY: mode -> district -> time of day -> weather ------------------------------------
+  showPlay() {
+    const g = this.game;
+    this.screen = 'play';
+    this.enterShowroom('title');
+    const modes = [
+      { id: 'free', label: 'FREE ROAM', sub: 'The open city with every feature: jobs, races, pursuits, stunts.', on: true },
+      { id: 'race', label: 'RACE', sub: 'Dedicated circuits with rival AI.', on: false },
+      { id: 'heist', label: 'HEIST', sub: 'Plan, rob, escape a city-wide chase.', on: false },
+      { id: 'career', label: 'CAREER', sub: '100+ tasks, levels and unlocks.', on: false },
+      { id: 'kids', label: 'KIDS', sub: 'Daylight, no police, easy fun.', on: false },
+    ];
+    const items = modes.map((m) => ({
+      label: m.label, sub: m.on ? m.sub : 'COMING SOON', disabled: !m.on, cls: `card mode-${m.id}`,
+      action: () => {
+        this.playSetup = { mode: m.id };
+        this.showPlayStep2();
+      },
+    }));
+    this.render(`
+      <div class="play-wrap">
+        <div class="step-head"><b>01</b><span>SELECT MODE</span>${this.stepDots(0)}</div>
+        <div class="menu-list cards"></div>
+        <div class="menu-foot">←→ SELECT · ENTER CONFIRM · ESC BACK</div>
+      </div>`, items, { cls: 'play-screen', horizontal: true });
+    this.onBack = () => this.showTitle();
+  }
+
+  stepDots(i) {
+    return `<div class="step-dots">${[0, 1, 2, 3].map((k) => `<i class="${k <= i ? 'on' : ''}"></i>`).join('')}</div>`;
+  }
+
+  // Filled in by the V2 lighting milestone (district / time / weather cards).
+  showPlayStep2() {
+    this.game.startPlay({});
+  }
+
+  // ---- player name ---------------------------------------------------------------------------
+  showName() {
+    const g = this.game;
+    this.screen = 'name';
+    const items = [
+      { label: 'SAVE NAME', action: () => save() },
+      { label: 'BACK', action: () => this.back(), cls: 'back' },
+    ];
+    this.render(`
+      <div class="panel cut name-panel">
+        <div class="panel-title">PLAYER NAME</div>
+        <p class="panel-note">Shown on the HUD, results screens and save slots.</p>
+        <input class="name-input" maxlength="16" spellcheck="false" autocomplete="off" value="${esc(g.progress.playerName)}">
+        <div class="menu-list"></div>
+      </div>`, items, { cls: 'settings-screen' });
+    const input = this.root.querySelector('.name-input');
+    const save = () => {
+      g.progress.setPlayerName(input.value);
+      g.hud.setPlayerName?.(g.progress.playerName);
+      this.sound('buy');
+      this.showTitle('PLAYER NAME');
+    };
+    this.capturing = true; // typing: menu keys off while the field has focus
+    input.addEventListener('focus', () => (this.capturing = true));
+    input.addEventListener('blur', () => (this.capturing = false));
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') save();
+      else if (e.key === 'Escape') input.blur();
+      else if (e.key === 'ArrowDown') input.blur();
+    });
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 30);
+    this.onBack = () => {
+      this.capturing = false;
+      this.showTitle('PLAYER NAME');
+    };
+  }
+
+  // ---- game info -----------------------------------------------------------------------------
+  showInfo(tab = 0) {
+    this.screen = 'info';
+    const tabs = [
+      ['STORY', `<p>Halcyon Bay never sleeps. You are <b>${esc(this.game.progress.playerName)}</b>, driver of a stolen prototype electric roadster with cold-gas thrusters: four copper outlets, a rocket pack behind the plate and a canopy that has seen too many police spotlights.</p><p>A fixer called <b>CIPHER</b> sends you jobs: getaways, data runs, bounties, sky gaps and ghost protocols. Every job raises your rep, opens new districts and buys upgrades. The Halcyon Bay Police answer with cruisers, interceptors, SWAT, a helicopter and EMP drones.</p><p>Outrun them. Out-fly them. Disappear.</p>`],
+      ['CONTROLS', this.controlsHtml(false)],
+      ['MODES', `<div class="info-modes"><div><b>FREE ROAM</b>Open city: jobs and street races at markers, pursuits, stunts, Air Stations, charging and repair.</div><div class="soon"><b>RACE</b>Five circuits with rival AI, laps, checkpoints and records.</div><div class="soon"><b>HEIST</b>Rob a bank, jewelry store or armored truck, then escape to a safehouse.</div><div class="soon"><b>CAREER</b>100+ tasks with levels: deliveries, drifts, jumps, takedowns and more.</div><div class="soon"><b>KIDS</b>Daylight, no police, no damage: collect stars, pop balloons, find hidden animals.</div></div><p class="panel-note">Race, Heist, Career and Kids arrive in the next update.</p>`],
+      ['CREDITS', `<p><b>RDSTR // COLD GAS PURSUIT</b></p><p>Game design, code, 3D models, procedural city, synthesized audio and music: built from scratch in the browser.</p><p>Built with <b>Three.js</b> (rendering), <b>Rapier</b> (physics) and <b>postprocessing</b> (bloom, tone mapping, SMAA).</p><p>In-city landmark: <b>GRAFIGATOR Design Studio</b>.</p><p class="panel-note">All brands in Halcyon Bay are fictional.</p>`],
+    ];
+    const items = tabs.map(([name, html], i) => ({
+      label: name, cls: 'tab',
+      onFocus: () => {
+        const c = this.root.querySelector('.info-body');
+        if (c) c.innerHTML = html;
+      },
+      action: () => {},
+    }));
+    items.push({ label: 'BACK', action: () => this.back(), cls: 'back' });
+    this.render(`
+      <div class="panel cut info-panel">
+        <div class="panel-title">GAME INFO</div>
+        <div class="info-grid"><div class="menu-list"></div><div class="info-body"></div></div>
+      </div>`, items, { cls: 'settings-screen', focus: tab });
+    this.onBack = () => this.showTitle('GAME INFO');
+  }
+
+  // ---- save games ----------------------------------------------------------------------------
+  showSaves(from, focus = 0) {
+    const g = this.game;
+    const p = g.progress;
+    this.screen = 'saves';
+    if (from === 'title') this.enterShowroom('title');
+    const items = [];
+    for (let i = 0; i < SLOT_COUNT; i++) {
+      const info = p.slotInfo(i);
+      items.push({
+        label: `SLOT ${i + 1}`,
+        sub: info ? `${info.name} · LV ${info.level} · $${info.cash.toLocaleString()} · ${fmtTime(info.playtime)} · ${fmtDate(info.lastPlayed)}` : 'Empty',
+        value: info ? `<span class="slot-lv">LV ${info.level}</span>` : '<span class="slot-empty">—</span>',
+        cls: `slot ${info ? '' : 'empty'}`,
+        action: () => this.showSlot(from, i, info),
+      });
+    }
+    items.push({ label: 'BACK', action: () => this.back(), cls: 'back' });
+    this.render(`
+      <div class="panel cut saves-panel">
+        <div class="panel-title">SAVE GAMES</div>
+        <p class="panel-note">Current: ${esc(p.playerName)} · LV ${p.level} · $${p.cash.toLocaleString()} · ${fmtTime(p.data.playtime || 0)}</p>
+        <div class="menu-list"></div>
+        <div class="flash-msg"></div>
+      </div>`, items, { cls: `settings-screen ${from === 'pause' ? 'over-game' : ''}`, focus });
+    this.onBack = () => (from === 'pause' ? this.showPause() : this.showTitle('SAVE GAMES'));
+  }
+
+  showSlot(from, i, info) {
+    const g = this.game;
+    const p = g.progress;
+    const items = [];
+    if (info) {
+      items.push({
+        label: 'LOAD', sub: 'Replace the current career with this save', action: () => {
+          p.loadSlot(i);
+          p.apply(g.player);
+          g.playerVisual.setPaint(p.data.paint, true);
+          g.activities.buildStartMarkers();
+          if (from === 'pause') g.quitToTitle();
+          else this.showTitle();
+        },
+      });
+    }
+    items.push({
+      label: info ? 'OVERWRITE' : 'SAVE HERE', sub: 'Save the current career to this slot', action: () => {
+        const go = () => {
+          p.saveSlot(i);
+          this.sound('buy');
+          this.showSaves(from, i);
+        };
+        if (info) this.confirm(`OVERWRITE SLOT ${i + 1}?`, `${info.name} · LV ${info.level} will be replaced.`, go, () => this.showSlot(from, i, info));
+        else go();
+      },
+    });
+    if (info) items.push({ label: 'DELETE', cls: 'danger', action: () => this.confirm(`DELETE SLOT ${i + 1}?`, 'This cannot be undone.', () => {
+      p.deleteSlot(i);
+      this.showSaves(from, i);
+    }, () => this.showSlot(from, i, info)) });
+    items.push({ label: 'BACK', action: () => this.back(), cls: 'back' });
+    this.render(`<div class="panel cut confirm-panel"><div class="panel-title">SLOT ${i + 1}</div><p>${info ? `${esc(info.name)} · LV ${info.level} · $${info.cash.toLocaleString()}<br>${fmtTime(info.playtime)} played · ${fmtDate(info.lastPlayed)}` : 'Empty slot'}</p><div class="menu-list"></div></div>`, items, { cls: `settings-screen ${from === 'pause' ? 'over-game' : ''}` });
+    this.onBack = () => this.showSaves(from, i);
+  }
+
+  confirm(title, text, yes, no) {
+    const items = [{ label: 'CONFIRM', cls: 'danger', action: yes }, { label: 'CANCEL', action: no }];
+    const over = this.root.classList.contains('over-game') ? 'over-game' : '';
+    this.render(`<div class="panel cut confirm-panel"><div class="panel-title">${esc(title)}</div><p>${esc(text)}</p><div class="menu-list"></div></div>`, items, { cls: `settings-screen ${over}`, focus: 1 });
+    this.onBack = no;
+  }
+
+  // ---- exit ----------------------------------------------------------------------------------
+  showExit() {
+    this.screen = 'exit';
+    this.confirm('EXIT GAME?', 'Your career is saved automatically.', () => this.showThanks(), () => this.showTitle('EXIT'));
+  }
+
+  showThanks() {
+    const g = this.game;
+    this.screen = 'thanks';
+    if (g.audio) g.audio.setMenu(true);
+    this.render(`
+      <div class="thanks">
+        ${this.logoHtml()}
+        <div class="thanks-text">THANKS FOR PLAYING, ${esc(g.progress.playerName)}</div>
+        <p>You can close this tab now.</p>
+        <div class="menu-list"></div>
+      </div>`, [{ label: 'BACK TO TITLE', action: () => this.showTitle() }], { cls: 'thanks-screen' });
+    this.onBack = () => this.showTitle();
   }
 
   showList(kind, from) {
@@ -366,7 +635,7 @@ export class Menu {
         value: `<i class="swatch" style="background:#${paint.color.toString(16).padStart(6, '0')};box-shadow:0 0 10px #${(paint.glow || paint.color).toString(16).padStart(6, '0')}"></i>`,
         cls: equipped ? 'equipped' : '',
         sound: owned ? 'click' : 'buy',
-        onFocus: () => g.playerVisual.setPaint(id),
+        onFocus: () => g.playerVisual.setPaint(id, true),
         action: () => {
           if (!owned && !p.buyPaint(id)) {
             this.flash('NOT ENOUGH CASH');
@@ -374,7 +643,7 @@ export class Menu {
             return;
           }
           p.setPaint(id);
-          g.playerVisual.setPaint(id);
+          g.playerVisual.setPaint(id, true);
           this.showGarage(from, this.index + 1);
         },
       });
@@ -390,7 +659,7 @@ export class Menu {
         disabled: cost == null,
         sound: 'buy',
         onFocus: () => {
-          g.playerVisual.setPaint(p.data.paint);
+          if (g.playerVisual.paintKey !== p.data.paint) g.playerVisual.setPaint(p.data.paint, true);
           this.statPreview = key;
           this.renderStats();
         },
@@ -416,9 +685,9 @@ export class Menu {
       <div class="garage-hint">DRAG TO ROTATE · SCROLL TO ZOOM</div>`, items, { cls: 'garage-screen', focus });
     this.renderStats();
     this.onBack = () => {
-      g.playerVisual.setPaint(p.data.paint);
+      g.playerVisual.setPaint(p.data.paint, true);
       if (from === 'pause') this.showPause();
-      else this.showTitle();
+      else this.showTitle('GARAGE');
     };
   }
 
@@ -454,70 +723,92 @@ export class Menu {
   // ---- settings ------------------------------------------------------------------------------
   showSettings(from, focus = 0) {
     const g = this.game;
-    const s = g.settings;
     this.screen = 'settings';
     if (from === 'title') this.enterShowroom('title');
-    const set = (k) => (v) => s.set(k, v);
-    const items = [
-      { type: 'header', label: 'GRAPHICS' },
-      {
-        type: 'select', label: 'Quality', options: QUALITY_ORDER.map((q) => [q, QUALITY_PRESETS[q].label]), get: () => s.get('quality'),
-        set: (v) => {
-          s.set('quality', v);
-          g.applyQuality();
-        },
-      },
-      { type: 'select', label: 'Auto quality', sub: 'Drop a level if FPS stays below 45', options: [[true, 'On'], [false, 'Off']], get: () => s.get('autoQuality'), set: set('autoQuality') },
-      { type: 'select', label: 'Motion blur', options: [[true, 'On'], [false, 'Off']], get: () => s.get('motionBlur'), set: set('motionBlur') },
-      { type: 'slider', label: 'Camera shake', get: () => s.get('cameraShake') ?? 1, set: set('cameraShake') },
-      {
-        type: 'select', label: 'Time of day', options: TOD, get: () => s.get('timeOfDay'),
-        set: (v) => {
-          s.set('timeOfDay', v);
-          g.world.env.apply(v);
-        },
-      },
-      { type: 'select', label: 'Rain', options: [[true, 'On'], [false, 'Off']], get: () => s.get('rain'), set: set('rain') },
-      { type: 'header', label: 'AUDIO' },
-      { type: 'slider', label: 'Master volume', get: () => s.get('masterVolume'), set: set('masterVolume') },
-      { type: 'slider', label: 'Music volume', get: () => s.get('musicVolume'), set: set('musicVolume') },
-      { type: 'slider', label: 'SFX volume', get: () => s.get('sfxVolume'), set: set('sfxVolume') },
-      { type: 'header', label: 'GAMEPLAY' },
-      { type: 'select', label: 'Speed units', options: [['mph', 'MPH'], ['kmh', 'KM/H']], get: () => s.get('units'), set: set('units') },
-      { type: 'header', label: 'CONTROLS (KEYBOARD)' },
+    const cats = [
+      ['SOUND', 'Master, music, SFX'], ['VFX', 'Particles, motion blur, camera shake'], ['GRAPHICS', 'Quality preset, resolution scale'],
+      ['CONTROLS', 'Keyboard and gamepad bindings, flight assist'], ['HUD', 'Show / hide elements, gauge position'], ['CAREER', 'Units, reset career'],
     ];
-    for (const action of Object.keys(ACTION_LABELS)) {
-      const it = { type: 'bind', label: ACTION_LABELS[action], actionName: action };
-      it.action = () => this.capture(it, action);
-      items.push(it);
-    }
-    items.push(
-      {
-        label: 'Reset controls to defaults', action: () => {
-          s.resetBindings();
-          this.showSettings(from, this.index);
-        },
-      },
-      { type: 'header', label: 'CAREER' },
-      {
-        label: 'Reset career', sub: 'Erase cash, rep, records and upgrades', cls: 'danger', action: () => this.confirmReset(from),
-      },
-      { label: 'BACK', action: () => this.back(), cls: 'back' },
-    );
+    const items = cats.map(([c, sub]) => ({ label: c, sub, action: () => this.showSettingsCat(from, c) }));
+    items.push({ label: 'BACK', action: () => this.back(), cls: 'back' });
     this.render(`
-      <div class="panel settings-panel">
+      <div class="panel cut settings-panel narrow">
         <div class="panel-title">SETTINGS</div>
+        <div class="menu-list"></div>
+      </div>`, items, { cls: `settings-screen ${from === 'pause' ? 'over-game' : ''}`, focus });
+    this.onBack = () => (from === 'pause' ? this.showPause() : this.showTitle('SETTINGS'));
+  }
+
+  showSettingsCat(from, cat, focus = 0) {
+    const g = this.game;
+    const s = g.settings;
+    const set = (k) => (v) => s.set(k, v);
+    const onOff = [[true, 'On'], [false, 'Off']];
+    const hud = (k, label) => ({ type: 'select', label, options: [[true, 'Show'], [false, 'Hide']], get: () => s.get('hud')[k], set: (v) => { s.setHud(k, v); g.hud.applyLayout?.(); } });
+    let items = [];
+    if (cat === 'SOUND') {
+      items = [
+        { type: 'slider', label: 'Master volume', get: () => s.get('masterVolume'), set: set('masterVolume') },
+        { type: 'slider', label: 'Music volume', get: () => s.get('musicVolume'), set: set('musicVolume') },
+        { type: 'slider', label: 'SFX volume', get: () => s.get('sfxVolume'), set: set('sfxVolume') },
+      ];
+    } else if (cat === 'VFX') {
+      items = [
+        { type: 'slider', label: 'Particle amount', get: () => s.get('particleAmount') ?? 1, set: set('particleAmount') },
+        { type: 'select', label: 'Motion blur', options: onOff, get: () => s.get('motionBlur'), set: set('motionBlur') },
+        { type: 'select', label: 'Camera shake', options: [[1, 'On'], [0.5, 'Low'], [0, 'Off']], get: () => s.get('cameraShake') ?? 1, set: set('cameraShake') },
+      ];
+    } else if (cat === 'GRAPHICS') {
+      items = [
+        { type: 'select', label: 'Quality', options: QUALITY_ORDER.map((q) => [q, QUALITY_PRESETS[q].label]), get: () => s.get('quality'), set: (v) => { s.set('quality', v); g.applyQuality(); } },
+        { type: 'select', label: 'Resolution scale', options: [[0.5, '50%'], [0.67, '67%'], [0.75, '75%'], [0.85, '85%'], [1, '100%']], get: () => s.get('resScale') ?? 1, set: (v) => { s.set('resScale', v); g.applyQuality(); } },
+        { type: 'select', label: 'Auto quality', sub: 'Drop a level if FPS stays below 45', options: onOff, get: () => s.get('autoQuality'), set: set('autoQuality') },
+      ];
+    } else if (cat === 'CONTROLS') {
+      items = [
+        { type: 'select', label: 'Flight mode', sub: 'Assisted: auto-level, one key per move. Pro: full manual thrusters', options: [[true, 'Assisted'], [false, 'Pro']], get: () => s.get('flightAssist') !== false, set: set('flightAssist') },
+        { type: 'header', label: 'KEYBOARD' },
+      ];
+      for (const action of Object.keys(ACTION_LABELS)) {
+        const it = { type: 'bind', label: ACTION_LABELS[action], actionName: action };
+        it.action = () => this.capture(it, action);
+        items.push(it);
+      }
+      items.push({ type: 'header', label: 'GAMEPAD' });
+      for (const action of Object.keys(DEFAULT_PAD_BINDINGS)) {
+        const it = { type: 'bind', pad: true, label: ACTION_LABELS[action], actionName: action };
+        it.action = () => this.capturePad(it, action);
+        items.push(it);
+      }
+      items.push({ label: 'Reset controls to defaults', action: () => { s.resetBindings(); this.showSettingsCat(from, cat, this.index); } });
+    } else if (cat === 'HUD') {
+      items = [
+        hud('speed', 'Speedometer'), hud('battery', 'Battery'), hud('health', 'Chassis health'), hud('thrusters', 'Thrusters (COPV)'), hud('minimap', 'Minimap'), hud('score', 'Style score'),
+        { type: 'select', label: 'Gauge position', options: [['bottom', 'Bottom'], ['side', 'Side'], ['top', 'Top']], get: () => s.get('hud').position, set: (v) => { s.setHud('position', v); g.hud.applyLayout?.(); } },
+      ];
+    } else if (cat === 'CAREER') {
+      items = [
+        { type: 'select', label: 'Speed units', options: [['mph', 'MPH'], ['kmh', 'KM/H']], get: () => s.get('units'), set: set('units') },
+        { label: 'Reset career', sub: 'Erase cash, rep, records and upgrades', cls: 'danger', action: () => this.confirmReset(from) },
+      ];
+    }
+    items.push({ label: 'BACK', action: () => this.back(), cls: 'back' });
+    this.screen = 'settings';
+    this.render(`
+      <div class="panel cut settings-panel">
+        <div class="panel-title">SETTINGS <span class="crumb">/ ${cat}</span></div>
         <div class="menu-list scroll"></div>
       </div>`, items, { cls: `settings-screen ${from === 'pause' ? 'over-game' : ''}`, focus });
     this.refreshBinds();
-    this.onBack = () => (from === 'pause' ? this.showPause() : this.showTitle());
+    const ci = ['SOUND', 'VFX', 'GRAPHICS', 'CONTROLS', 'HUD', 'CAREER'].indexOf(cat);
+    this.onBack = () => this.showSettings(from, ci);
   }
 
   refreshBinds() {
     for (const it of this.items) {
       if (it.type !== 'bind') continue;
-      const codes = this.game.settings.get('bindings')[it.actionName] || [];
-      it.el.innerHTML = `<span class="mi-label">${esc(it.label)}</span><span class="mi-value keys">${codes.map((c) => `<kbd>${esc(keyName(c))}</kbd>`).join('')}${it.waiting ? '<em>PRESS A KEY · ESC CANCELS</em>' : ''}</span>`;
+      const codes = it.pad ? [PAD_BUTTON_NAMES[this.game.settings.get('padBindings')[it.actionName]] || '—'] : (this.game.settings.get('bindings')[it.actionName] || []).map(keyName);
+      it.el.innerHTML = `<span class="mi-label">${esc(it.label)}</span><span class="mi-value keys">${codes.map((c) => `<kbd>${esc(c)}</kbd>`).join('')}${it.waiting ? `<em>${it.pad ? 'PRESS A BUTTON · ESC CANCELS' : 'PRESS A KEY · ESC CANCELS'}</em>` : ''}</span>`;
     }
   }
 
@@ -542,21 +833,53 @@ export class Menu {
     });
   }
 
+  capturePad(it, action) {
+    const g = this.game;
+    this.capturing = true;
+    it.waiting = true;
+    this.refreshBinds();
+    const done = (btn) => {
+      this.capturing = false;
+      it.waiting = false;
+      window.removeEventListener('keydown', cancel, true);
+      if (btn != null) {
+        const b = { ...g.settings.get('padBindings') };
+        // A button belongs to one action: swap with the action that had it.
+        const prev = Object.keys(b).find((k) => b[k] === btn);
+        if (prev && prev !== action) b[prev] = b[action];
+        b[action] = btn;
+        g.settings.set('padBindings', b);
+        this.sound('buy');
+      }
+      // Ignore the held button for menu navigation.
+      this.padPrev = { up: true, down: true, left: true, right: true, a: true, b: true, start: true };
+      this.refreshBinds();
+    };
+    const cancel = (e) => {
+      if (e.code !== 'Escape') return;
+      e.stopPropagation();
+      g.input.capturePadNext(null);
+      done(null);
+    };
+    window.addEventListener('keydown', cancel, true);
+    g.input.capturePadNext(done);
+  }
+
   confirmReset(from) {
     const items = [
       {
         label: 'YES, ERASE MY CAREER', cls: 'danger', action: () => {
           this.game.progress.reset();
           this.game.progress.apply(this.game.player);
-          this.game.playerVisual.setPaint('pearlWhite');
+          this.game.playerVisual.setPaint('pearlWhite', true);
           this.game.activities.buildStartMarkers();
-          this.showSettings(from);
+          this.showSettingsCat(from, 'CAREER');
         },
       },
-      { label: 'CANCEL', action: () => this.showSettings(from) },
+      { label: 'CANCEL', action: () => this.showSettingsCat(from, 'CAREER') },
     ];
-    this.render(`<div class="panel confirm-panel"><div class="panel-title">RESET CAREER?</div><p>All cash, rep, unlocked districts, mission stars, race records, paints and upgrades will be lost.</p><div class="menu-list"></div></div>`, items, { cls: 'settings-screen', focus: 1 });
-    this.onBack = () => this.showSettings(from);
+    this.render(`<div class="panel cut confirm-panel"><div class="panel-title">RESET CAREER?</div><p>All cash, rep, unlocked districts, mission stars, race records, paints and upgrades will be lost.</p><div class="menu-list"></div></div>`, items, { cls: 'settings-screen', focus: 1 });
+    this.onBack = () => this.showSettingsCat(from, 'CAREER');
   }
 
   // ---- pause ---------------------------------------------------------------------------------
@@ -581,6 +904,7 @@ export class Menu {
       { label: 'CONTROLS', action: () => this.showControls() },
       { label: 'SETTINGS', action: () => this.showSettings('pause') },
       { label: 'GARAGE', sub: 'Upgrades and paint', action: () => this.showGarage('pause') },
+      { label: 'SAVE GAME', sub: '3 slots', action: () => this.showSaves('pause') },
       { label: 'QUIT TO TITLE', action: () => g.quitToTitle() },
     );
     const objective = act ? `<div class="pause-obj">${esc(act.def.name.toUpperCase())}</div>` : '';
@@ -626,6 +950,18 @@ export class Menu {
       </div>`, [{ label: 'BACK', action: () => this.back(), cls: 'back' }], { cls: 'pause-screen over-game' });
     this.onBack = () => this.showPause();
   }
+}
+
+function fmtTime(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m ${String(Math.floor(sec % 60)).padStart(2, '0')}s`;
+}
+
+function fmtDate(ms) {
+  if (!ms) return '—';
+  const d = new Date(ms);
+  return `${d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 function fmt(t) {

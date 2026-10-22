@@ -44,7 +44,36 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 | `ui/ActivityUI.js` | Briefing cards, results screen, race HUD, countdown, objective line |
 | `ai/Heat.js`, `ai/PoliceAI.js`, `ai/Radio.js` | Heat 0-5, evade/cooldown loop, busted timer; police units, roadblocks, spikes, heli, drones; dispatch subtitles |
 
-## Milestones
+## Version 2 (UPDATE_V2.md) — branch `v2-part1`
+- [x] **V2 M1 — Title screen and main menu** (see "V2 M1 results")
+- [ ] V2 M2 — Daylight, weather and lighting quality
+- [ ] V2 M3 — City overhaul (roads, districts, landmarks, people, Grafigator)
+- [ ] V2 M4 — HUD, thruster control, physics and feedback
+- Part 2 (M5-M8) not started.
+- V2 smoke test: `SCEN=./v2.mjs EXTRA='&menu=1' node tools/smoke.mjs m1 screenshots/v2m1` (scenarios in `tools/v2.mjs`).
+
+## V2 M1 results
+- New visual identity (css/style.css "Menus (V2)"): graphite glass panels with cut corners, cyan->magenta signal line,
+  skewed button plates with index numbers, glow line that grows under the focused item, light-sweep shine on focus,
+  hover sounds, scanlines. Logo: heavy italic RDSTR with glitch layers + animated light sweep.
+- Showroom (`ui/GarageScene.js`): planar-reflection floor (vendored `Reflector`) under a glossy tiled coat, key spot with
+  shadows, 3 sweeping light bars, cyan/magenta rim lights, back light, additive haze beams, fog, light pillars, slow camera
+  drift; subtle GRAFIGATOR wall sign.
+- Live car viewer: drag (mouse / touch) to orbit, wheel / pinch to zoom (5.4-12 m, never inside the car), idle turntable.
+  Hotspots projected on the car: doors, roof (canopy lifts on a rear hinge), lights on/off, thrusters (plate flips, vents
+  open and glow). Paint changes blend smoothly (`RoadsterModel.setPaint(key, true)`).
+- Title buttons: CONTINUE (when a career exists), PLAY (mode cards; Free Roam only until Part 2), GARAGE, PLAYER NAME
+  (saved in the career, shown on the title and save slots), SETTINGS, GAME INFO (Story / Controls / Modes / Credits),
+  SAVE GAMES (3 slots: name, level, cash, playtime, date; load / overwrite / delete with confirmation; also in Pause),
+  EXIT (confirm -> "Thanks for playing" screen).
+- Settings by category: Sound (master/music/SFX), VFX (particle amount, motion blur, camera shake), Graphics (preset,
+  resolution scale, auto quality), Controls (flight assist, keyboard + gamepad rebinding), HUD (show/hide, gauge position;
+  wired up in M4), Career (units, reset).
+- `world/Grafigator.js`: logo parsed from `reference/grafigator-logo.svg` with SVGLoader and extruded; bold block-glyph
+  wordmark; `makeSign()` illuminated sign with lime/teal trim; `drawLogo2D()` for canvas billboards.
+- Progress: `playerName`, `playtime`, `lastPlayed`, `level` (from rep until Part 2 career XP), slot API.
+
+## Milestones (V1)
 - [x] **M1 — Setup, collision and vehicle physics on a test city block**
 - [x] M2 — Full city world, lighting, sky, atmosphere and post-processing
 - [x] M3 — Roadster and police models

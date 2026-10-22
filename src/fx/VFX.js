@@ -77,7 +77,7 @@ export class VFX {
     this.onExplosion = null; // (position, power) hook used by the audio system
     this.scene = game.scene;
     this.physics = game.physics;
-    const q = () => game.settings.preset.particles;
+    const q = () => game.settings.preset.particles * (game.settings.get('particleAmount') ?? 1);
     this.quality = q;
     const scene = this.scene;
     this.smoke = new ParticleSystem(scene, { max: 900, map: Tex.smokeSprite(), name: 'smoke', renderOrder: 6 });

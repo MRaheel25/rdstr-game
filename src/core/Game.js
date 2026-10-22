@@ -1,5 +1,6 @@
 // Game orchestrator: owns all systems, runs the fixed-step physics loop with render
 // interpolation, time scaling (slow motion / hit stop) and the top-level state machine.
+import { loadGrafigator } from '../world/Grafigator.js';
 import * as THREE from 'three';
 import { Settings, QUALITY_ORDER } from './Settings.js';
 import { Input } from './Input.js';
@@ -78,6 +79,7 @@ export class Game {
     this.camera = this.gfx.camera;
     this.setLoading(15, 'Loading physics');
     this.physics = await Physics.create();
+    await loadGrafigator();
     this.setLoading(30, 'Generating Halcyon Bay');
     await nextFrame();
     const t0 = performance.now();
@@ -199,6 +201,7 @@ export class Game {
       this.updatePlayerControls(realDt);
       this.physics.advance(dt, (h) => this.prePhysics(h), (h) => this.postPhysics(h));
       this.updateGameplay(dt, realDt);
+      this.progress.tickPlaytime(realDt);
     }
     this.playerVisual.update(dt, this.player);
     for (const n of this.npcs) n.model.update(dt, n.vehicle, n.ctx || {});
