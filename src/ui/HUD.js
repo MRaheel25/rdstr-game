@@ -40,17 +40,30 @@ export class HUD {
     this.lastWarnKey = '';
     this.visible = false;
     this.gaugeTimer = 0;
-    // V2 gauge tiles.
-    this.tiles = {};
-    for (const k of ['batt', 'hp', 'copv']) {
-      const el = $(`#cluster .gt.${k}`);
-      this.tiles[k] = { el, val: el.querySelector('.gt-head b'), bar: el.querySelector('.gt-bar i'), sub: el.querySelector('.gt-sub'), cls: '' };
+    // V3 dash: segmented thruster (nitro) bar, battery bar, per-zone damage silhouette.
+    this.nitroEl = $('#dash .nitro');
+    const bar = this.nitroEl.querySelector('.nitro-bar');
+    this.segs = [];
+    for (let i = 0; i < 20; i++) {
+      const seg = document.createElement('i');
+      bar.appendChild(seg);
+      this.segs.push(seg);
     }
+    this.nitroVal = this.nitroEl.querySelector('b');
+    this.battW = $('#dash .batt-w');
+    this.battBar = this.battW.querySelector('.bw-bar i');
+    this.battVal = this.battW.querySelector('b');
+    this.carW = $('#dash .car-w');
+    this.carBar = this.carW.querySelector('.cw-bar i');
+    this.carVal = this.carW.querySelector('b');
+    this.zones = Object.fromEntries(['front', 'rear', 'left', 'right'].map((z) => [z, this.carW.querySelector(`.z-${z}`)]));
+    this.cache = {};
     this.tv = $('#thrust-view');
     this.tg = this.tv.getContext('2d');
-    this.tv.width = 120 * dpr;
-    this.tv.height = 120 * dpr;
-    this.tg.scale(dpr, dpr);
+    this.tv.width = 88 * dpr;
+    this.tv.height = 88 * dpr;
+    this.tvScale = 88 / 120;
+    this.tg.scale(dpr * this.tvScale, dpr * this.tvScale);
     this.tagEl = $('#player-tag');
     this.applyLayout();
   }
@@ -67,18 +80,17 @@ export class HUD {
     this.tagEl.textContent = name ? `▸ ${String(name).toUpperCase()}` : '';
   }
 
-  // One gauge tile: fraction, value text, sub line; green / yellow / red with a pulse when low.
-  tile(k, f, text, sub, mid = 0.5, low = 0.25) {
-    const t = this.tiles[k];
-    const cls = f <= low ? 'low' : f <= mid ? 'mid' : '';
-    if (cls !== t.cls) {
-      t.el.classList.toggle('low', cls === 'low');
-      t.el.classList.toggle('mid', cls === 'mid');
-      t.cls = cls;
-    }
-    t.bar.style.width = `${(clamp(f, 0, 1) * 100).toFixed(1)}%`;
-    if (t.text !== text) t.val.textContent = t.text = text;
-    if (t.subText !== sub) t.sub.textContent = t.subText = sub;
+  // Set text / class only when it changes (no layout churn every frame).
+  put(el, key, v, prop = 'textContent') {
+    if (this.cache[key] === v) return;
+    this.cache[key] = v;
+    if (prop === 'class') el.setAttribute('class', v);
+    else if (prop === 'width') el.style.width = v;
+    else el[prop] = v;
+  }
+
+  level(f, mid, low) {
+    return f <= low ? 'low' : f <= mid ? 'mid' : 'ok';
   }
 
   show(v) {
@@ -138,12 +150,32 @@ export class HUD {
     }
     this.drawGauge(car, sp, units);
     if (e) {
-      this.tile('batt', e.battery / 100, `${Math.round(e.battery)}%`, `${Math.round(e.temp)}°C${e.thermalLimit ? ' · HOT' : ''}`, 0.4, 0.15);
-      this.tile('copv', e.pressurePct / 100, `${Math.round(e.pressurePct)}%`, e.emp > 0 ? 'EMP OFFLINE' : thrustText(car), 0.4, 0.15);
-      this.tiles.copv.el.classList.toggle('firing', !!(car.thrust.rocket || car.thrust.hover || car.thrust.air));
+      // Thruster (COPV) bar: 20 segments, glows while firing, drains / refills live.
+      const p = clamp(e.pressurePct / 100, 0, 1);
+      const lit = Math.round(p * 20);
+      const firing = !!(car.thrust.rocket || car.thrust.hover || car.thrust.air);
+      if (this.cache.lit !== lit) {
+        this.cache.lit = lit;
+        this.segs.forEach((sg, i) => sg.classList.toggle('on', i < lit));
+      }
+      this.put(this.nitroEl, 'nitroCls', `nitro ${firing ? 'firing' : ''} ${e.emp > 0 ? 'emp' : ''} ${this.level(p, 0.35, 0.15)}`, 'class');
+      this.put(this.nitroVal, 'nitroVal', e.emp > 0 ? 'EMP' : `${Math.round(p * 100)}%`);
+      const b = clamp(e.battery / 100, 0, 1);
+      const charging = this.charging;
+      this.put(this.battW, 'battCls', `batt-w ${this.level(b, 0.45, 0.2)} ${charging ? 'charging' : ''}`, 'class');
+      this.put(this.battBar, 'battW', `${(b * 100).toFixed(1)}%`, 'width');
+      this.put(this.battVal, 'battVal', `${Math.round(e.battery)}%`);
     }
-    const hpF = car.hp / car.maxHp;
-    this.tile('hp', hpF, `${Math.round(hpF * 100)}%`, hpF < 0.25 ? 'CRITICAL' : hpF < 0.5 ? 'DAMAGED' : 'OK', 0.5, 0.25);
+    const hpF = clamp(car.hp / car.maxHp, 0, 1);
+    this.put(this.carW, 'carCls', `car-w ${this.level(hpF, 0.5, 0.25)}`, 'class');
+    this.put(this.carBar, 'carW', `${(hpF * 100).toFixed(1)}%`, 'width');
+    this.put(this.carVal, 'carVal', `${Math.round(hpF * 100)}%`);
+    const zd = car.zoneDamage || {};
+    for (const z in this.zones) {
+      const d = zd[z] || 0;
+      const k = d > 0.66 ? 'z bad' : d > 0.33 ? 'z hurt' : d > 0.05 ? 'z worn' : 'z';
+      this.put(this.zones[z], `z_${z}`, `${k} z-${z}`, 'class');
+    }
     this.drawThrusters(car);
   }
 
@@ -235,103 +267,80 @@ export class HUD {
     this.setWarning('busted', heat.busted > 0.4 ? `BUSTED ${'■'.repeat(Math.ceil(heat.busted * 3))}${'□'.repeat(Math.max(0, 9 - Math.ceil(heat.busted * 3)))}` : null);
   }
 
+  // V3 speedometer: one thick smooth arc (240°), fine ticks, power sweep inside.
   drawGauge(car, sp, units) {
     const g = this.g;
     const cx = 150;
     const cy = 150;
     g.clearRect(0, 0, 300, 300);
-    const a0 = Math.PI * 0.75;
-    const sweep = Math.PI * 1.5;
-    const maxSp = units === 'kmh' ? 480 : 300;
-    // Track.
-    g.lineCap = 'butt';
-    g.lineWidth = 9;
-    g.strokeStyle = 'rgba(255,255,255,0.08)';
-    g.beginPath();
-    g.arc(cx, cy, 128, a0, a0 + sweep);
-    g.stroke();
-    // Speed fill.
+    const a0 = Math.PI * (5 / 6);
+    const sweep = Math.PI * (4 / 3);
+    const maxSp = units === 'kmh' ? 400 : 250;
     const f = clamp(sp / maxSp, 0, 1);
-    const grad = g.createLinearGradient(20, 280, 280, 20);
-    grad.addColorStop(0, '#3fe0ff');
-    grad.addColorStop(0.7, '#9af4ff');
-    grad.addColorStop(1, '#ff3b4a');
-    g.strokeStyle = grad;
-    g.shadowColor = '#3fe0ff';
-    g.shadowBlur = 12;
+    this.needle = this.needle == null ? f : this.needle + (f - this.needle) * 0.35;
+    const n = this.needle;
+    g.lineCap = 'round';
+    g.lineWidth = 14;
+    g.strokeStyle = 'rgba(255,255,255,0.1)';
     g.beginPath();
-    g.arc(cx, cy, 128, a0, a0 + sweep * f);
+    g.arc(cx, cy, 124, a0, a0 + sweep);
     g.stroke();
-    g.shadowBlur = 0;
-    // Ticks.
-    g.strokeStyle = 'rgba(255,255,255,0.45)';
-    g.fillStyle = 'rgba(255,255,255,0.55)';
-    g.font = '10px monospace';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    const step = units === 'kmh' ? 40 : 25;
-    for (let s = 0; s <= maxSp; s += step) {
-      const a = a0 + sweep * (s / maxSp);
-      const major = s % (step * 2) === 0;
-      g.lineWidth = major ? 2 : 1;
+    const grad = g.createConicGradient ? g.createConicGradient(a0, cx, cy) : null;
+    if (grad) {
+      grad.addColorStop(0, '#2b8cff');
+      grad.addColorStop(0.45, '#33e0ff');
+      grad.addColorStop(0.62, '#ffffff');
+      grad.addColorStop(0.67, '#ff4a5a');
+      grad.addColorStop(1, '#ff4a5a');
+    }
+    g.strokeStyle = grad || '#33e0ff';
+    g.shadowColor = 'rgba(51,224,255,0.7)';
+    g.shadowBlur = 16;
+    if (n > 0.002) {
       g.beginPath();
-      g.moveTo(cx + Math.cos(a) * 138, cy + Math.sin(a) * 138);
-      g.lineTo(cx + Math.cos(a) * (major ? 146 : 142), cy + Math.sin(a) * (major ? 146 : 142));
+      g.arc(cx, cy, 124, a0, a0 + sweep * n);
       g.stroke();
     }
-    // Power bar (inner): traction power use, green for regen.
+    g.shadowBlur = 0;
+    // Ticks + numbers.
+    const step = units === 'kmh' ? 20 : 10;
+    g.fillStyle = 'rgba(238,244,255,0.6)';
+    g.font = '600 13px Rajdhani, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    for (let v = 0; v <= maxSp; v += step) {
+      const a = a0 + sweep * (v / maxSp);
+      const major = v % (step * 5) === 0;
+      g.strokeStyle = major ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.28)';
+      g.lineWidth = major ? 2.5 : 1.2;
+      g.lineCap = 'butt';
+      g.beginPath();
+      g.moveTo(cx + Math.cos(a) * 102, cy + Math.sin(a) * 102);
+      g.lineTo(cx + Math.cos(a) * (major ? 92 : 97), cy + Math.sin(a) * (major ? 92 : 97));
+      g.stroke();
+      if (major) g.fillText(String(v), cx + Math.cos(a) * 80, cy + Math.sin(a) * 80);
+    }
+    // Power / regen sweep (inner, slim).
     const e = car.energy;
     const power = clamp(car.controls.throttle * (e ? e.powerScale : 1), 0, 1);
     const regen = car.controls.brake > 0.1 && car.fwdSpeed > 3 ? car.controls.brake : 0;
+    this.pw = (this.pw || 0) + ((car.thrust.rocket ? 1 : power * 0.85) - (this.pw || 0)) * 0.2;
+    g.lineCap = 'round';
     g.lineWidth = 4;
     g.strokeStyle = 'rgba(255,255,255,0.07)';
     g.beginPath();
-    g.arc(cx, cy, 114, a0, a0 + sweep);
+    g.arc(cx, cy, 110, a0, a0 + sweep);
     g.stroke();
-    if (power > 0.01) {
-      g.strokeStyle = car.thrust.rocket ? '#ffb02e' : '#eef4ff';
+    if (this.pw > 0.01) {
+      g.strokeStyle = car.thrust.rocket ? '#ffb02e' : 'rgba(238,244,255,0.85)';
       g.beginPath();
-      g.arc(cx, cy, 114, a0, a0 + sweep * power * (car.thrust.rocket ? 1 : 0.85));
+      g.arc(cx, cy, 110, a0, a0 + sweep * this.pw);
       g.stroke();
     }
     if (regen > 0) {
       g.strokeStyle = '#6cff8f';
       g.beginPath();
-      g.arc(cx, cy, 114, a0, a0 + sweep * regen * 0.3);
-      g.stroke();
-    }
-    if (e) {
-      // Battery arc (left, slim) colored by charge, with temperature as an outer tick band.
-      const bA0 = Math.PI * 0.8;
-      const bSweep = Math.PI * 0.55;
-      g.lineWidth = 5;
-      g.strokeStyle = 'rgba(255,255,255,0.07)';
-      g.beginPath();
-      g.arc(cx, cy, 98, bA0, bA0 + bSweep);
-      g.stroke();
-      const b = e.battery / 100;
-      g.strokeStyle = b > 0.3 ? '#6cff8f' : b > 0.12 ? '#ffb02e' : '#ff3b4a';
-      g.beginPath();
-      g.arc(cx, cy, 98, bA0 + bSweep * (1 - b), bA0 + bSweep);
-      g.stroke();
-      const tN = clamp((e.temp - 30) / 80, 0, 1);
-      g.lineWidth = 2;
-      g.strokeStyle = e.temp > 90 ? '#ff3b4a' : e.temp > 70 ? '#ffb02e' : 'rgba(150,200,255,0.6)';
-      g.beginPath();
-      g.arc(cx, cy, 91, bA0 + bSweep * (1 - tN), bA0 + bSweep);
-      g.stroke();
-      // COPV arc (right).
-      const cA0 = Math.PI * 1.65;
-      const cSweep = Math.PI * 0.55;
-      g.lineWidth = 5;
-      g.strokeStyle = 'rgba(255,255,255,0.07)';
-      g.beginPath();
-      g.arc(cx, cy, 98, cA0, cA0 + cSweep);
-      g.stroke();
-      const p = clamp(e.pressurePct / 100, 0, 1);
-      g.strokeStyle = e.emp > 0 ? '#ff3b4a' : '#bfe9ff';
-      g.beginPath();
-      g.arc(cx, cy, 98, cA0, cA0 + cSweep * p);
+      g.arc(cx, cy, 110, a0, a0 + sweep * regen * 0.3);
       g.stroke();
     }
   }

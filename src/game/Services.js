@@ -137,6 +137,7 @@ export class Services {
     const k = Math.min(1, a.t / a.dur);
     const p = car.position;
     if (a.s.type === 'charge') {
+      g.hud.charging = true;
       car.energy.battery = a.from + a.need.pct * k;
       this.ring.position.set(p.x, p.y - 0.45 + Math.sin(a.t * 3) * 0.35 + 0.4, p.z);
       this.ring.scale.setScalar(1 + 0.08 * Math.sin(a.t * 8));
@@ -162,6 +163,7 @@ export class Services {
     g.progress.spend(a.need.cost);
     if (a.s.type === 'repair') {
       car.hp = car.maxHp;
+      car.zoneDamage = { front: 0, rear: 0, left: 0, right: 0 };
       car.energy.refillPressure();
       for (const w of car.wheels) w.popped = false;
       g.playerVisual.repair();
@@ -172,6 +174,7 @@ export class Services {
     }
     g.audio && g.audio.sfx.serviceDone();
     this.ring.visible = false;
+    g.hud.charging = false;
     this.active = null;
     this.cooldown = 3;
     g.inputLock = false;
@@ -181,6 +184,7 @@ export class Services {
   cancel() {
     if (!this.active) return;
     this.ring.visible = false;
+    this.game.hud.charging = false;
     this.active = null;
     this.game.inputLock = false;
   }

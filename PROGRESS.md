@@ -49,14 +49,28 @@ UPDATE_V3.md replaces UPDATE_V2.md Part 2. Smoke tests: `SCEN=./v3.mjs EXTRA='&m
 - [x] **V3 M1 — Unlock everything, map and navigation** (see "V3 M1 results")
 - [x] **V3 M2 — Sound fix and music options** (see "V3 M2 results")
 - [x] **V3 M3 — Main menu first impression** (see "V3 M3 results")
-- [ ] V3 M4 — In-game HUD
+- [x] **V3 M4 — In-game HUD** (see "V3 M4 results")
 - [ ] V3 M5 — Thruster control and safe landings
 - [ ] V3 M6 — Realistic crashes and destruction
 - [ ] V3 M7 — Race mode
 - [ ] V3 M8 — Taxi mode
 - [ ] V3 M9 — Kids, Heist, Career, saves, garage
 - [ ] V3 M10 — Polish
-- **Next:** V3 M4 (in-game HUD).
+- **Next:** V3 M5 (thruster control and safe landings).
+
+## V3 M4 results
+- One dash stack bottom right (`#dash`, fonts and colours from the new menu): a large speedometer (single thick 240°
+  arc with a blue -> cyan -> white -> red conic gradient, smoothed needle, fine ticks with numbers, slim power / regen
+  sweep inside) and the speed in big Rajdhani numbers; under it a THRUSTER bar like an Asphalt nitro bar: 20 skewed
+  segments that drain and refill with COPV pressure, glow and pulse while thrusters fire, turn yellow / red when low,
+  read EMP when disabled.
+- Battery: icon + rounded bar + percent, green -> yellow -> red with a pulse when low; while charging at a station the
+  bar turns cyan with flowing stripes and a bolt in the icon (`hud.charging`, set by Services).
+- Chassis: top-view car silhouette with front / rear / left / right zones coloured by `player.zoneDamage` (filled from
+  impact points in `Game.onPlayerImpact`, reset on repair / respawn) plus a health bar. The thruster diagram from V2
+  sits beside it (88 px).
+- Settings > HUD show / hide and bottom / side / top positions still work (the stack moves as a whole); nothing sits
+  in the centre of the screen except warnings. Scaled down on short and phone screens.
 
 ## V3 M3 results
 - Fonts bundled locally: Rajdhani 500/600/700 (display) and Inter 400/500/600/800 (UI) in `vendor/fonts` (from

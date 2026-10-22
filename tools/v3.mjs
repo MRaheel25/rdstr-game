@@ -108,4 +108,32 @@ export default {
       await shot(`size_${w}x${h}`);
     }
   },
+  // M4: new HUD (healthy, damaged + low, charging), positions.
+  async m4({ page, sleep, shot, log }) {
+    await page.evaluate(() => __game.startPlay({ district: 'downtown', tod: 'golden' }));
+    await sleep(1500);
+    await page.keyboard.press('Enter');
+    await sleep(5000);
+    await page.keyboard.press('h');
+    await page.keyboard.down('KeyW');
+    await sleep(2500);
+    await shot('drive');
+    await page.keyboard.up('KeyW');
+    await page.evaluate(() => {
+      const p = __game.player;
+      p.hp = p.maxHp * 0.22;
+      p.zoneDamage = { front: 0.8, rear: 0.1, left: 0.45, right: 0 };
+      p.energy.battery = 14;
+      p.energy.pressure = p.energy.pressureMax * 0.3;
+    });
+    await sleep(1500);
+    await shot('low');
+    await page.evaluate(() => { __game.hud.charging = true; });
+    await sleep(800);
+    await shot('charging');
+    await page.evaluate(() => { __game.hud.charging = false; __game.settings.setHud('position', 'top'); __game.hud.applyLayout(); });
+    await sleep(800);
+    await shot('top');
+    await page.evaluate(() => { __game.settings.setHud('position', 'bottom'); __game.hud.applyLayout(); });
+  },
 };

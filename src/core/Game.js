@@ -423,6 +423,13 @@ export class Game {
     if (info.roof) dmg += 12;
     v.damage(dmg);
     // Dent the body panel nearest the contact point.
+    // V3: damage per zone for the HUD car silhouette (front is local -z).
+    if (dmg > 0 && info.point) {
+      const lp = this.playerVisual.root.worldToLocal(info.point.clone());
+      const zone = Math.abs(lp.z) > 1.2 ? (lp.z < 0 ? 'front' : 'rear') : lp.x < 0 ? 'left' : 'right';
+      const zd = v.zoneDamage || (v.zoneDamage = { front: 0, rear: 0, left: 0, right: 0 });
+      zd[zone] = Math.min(1, zd[zone] + dmg / (v.maxHp * 0.45));
+    }
     if (s > 6 && this.playerVisual.dent) {
       const local = this.playerVisual.root.worldToLocal(info.point.clone());
       this.playerVisual.dent(local, clamp(s / 12, 0.3, 3));
@@ -583,6 +590,7 @@ export class Game {
     p.energy.temp = Math.min(p.energy.temp, 45);
     p.energy.emp = 0;
     this.playerVisual.repair();
+    p.zoneDamage = { front: 0, rear: 0, left: 0, right: 0 };
     this.police.bustedFired = false;
   }
 
