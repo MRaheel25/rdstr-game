@@ -302,7 +302,7 @@ export class Game {
     c.yaw = a.yaw;
     c.roll = a.roll;
     this.flightAssist(realDt);
-    if (this.player.speedCap && this.player.speed > this.player.speedCap) c.throttle = 0;
+    if (this.player.speed > (this.player.speedCap || Infinity)) c.throttle = 0;
     const e = this.player.energy;
     e.ghost = i.down('ghost') && e.battery > 0.5;
     if (this.inputLock) {
@@ -778,10 +778,15 @@ export class Game {
   startPlay({ continueStory = false, activity = null, district = null, tod = null, weather = null, mode = 'free' } = {}) {
     const m = this.menu;
     // Kids Mode: daylight, no police, no damage, gentle speed.
-    this.mode = mode;
+    // Story jobs (CONTINUE, Career / Heist lists) play in Missions / Career mode.
+    const job = activity || continueStory;
+    this.mode = mode === 'free' && job && !(activity && activity.kind === 'race') ? 'career' : mode;
     this.kidsMode = mode === 'kids';
     this.player.noDamage = this.kidsMode;
-    this.player.speedCap = this.kidsMode ? 27 : 0;
+    // Only Kids Mode caps speed; every other mode runs to the car's real top speed. (0 here used
+    // to read as a 0 m/s cap in Vehicle and cut all wheel drive, leaving only the thrusters.)
+    this.player.speedCap = this.kidsMode ? 27 : Infinity;
+    this.inputLock = false;
     this.services.cancel();
     if (tod || weather) this.setConditions(tod || this.settings.get('tod'), weather || this.settings.get('weather'));
     m.close();
@@ -919,22 +924,66 @@ export class Game {
     this.world.env.setConditions(tod, weather);
   }
 
-  // Small still of the city rendered from the game (district cards in the play setup).
+  // Small still of the city rendered from the game (mode / district / track cards). `start` is
+  // either a start point (steep aerial view) or a shot from ui/PreviewShots.js: camera, look-at,
+  // fov, conditions (bright daylight unless the shot says otherwise) and a temporary stage.
+  renderPreviews(shots, w, h) {
+    this._previewBatch = true;
+    try {
+      return shots.map((s) => {
+        try {
+          return s ? this.renderPreview(s, w, h) : null;
+        } catch (e) {
+          console.warn('preview failed', e);
+          return null;
+        }
+      });
+    } finally {
+      this._previewBatch = false;
+      this.restorePreviewConditions();
+    }
+  }
+
+  restorePreviewConditions() {
+    if (!this._previewCond) return;
+    this._previewCond = null;
+    this.world.env.setConditions(this.settings.get('tod') || 'noon', this.settings.get('weather') || 'clear');
+  }
+
   renderPreview(start, w = 320, h = 180) {
     const r = this.gfx.renderer;
     const world = this.world;
-    const cam = new THREE.PerspectiveCamera(55, r.domElement.width / r.domElement.height, 0.5, 2500);
-    const p = start.position;
-    // Steep aerial view from the outer side of the start point, so the district itself fills
-    // the frame rather than the downtown skyline behind it.
-    const out = new THREE.Vector3(p.x, 0, p.z);
-    if (out.lengthSq() < 1e4) out.set(0.4, 0, 1);
-    out.normalize();
-    cam.position.set(p.x + out.x * 60, p.y + 75, p.z + out.z * 60);
-    cam.lookAt(p.x - out.x * 30, p.y, p.z - out.z * 30);
+    const cam = new THREE.PerspectiveCamera(start.fov || 55, r.domElement.width / r.domElement.height, 0.5, 2500);
+    let p = start.position;
+    if (start.cam) {
+      p = start.look;
+      cam.position.copy(start.cam);
+      cam.lookAt(start.look);
+    } else {
+      // Steep aerial view from the outer side of the start point.
+      const out = new THREE.Vector3(p.x, 0, p.z);
+      if (out.lengthSq() < 1e4) out.set(0.4, 0, 1);
+      out.normalize();
+      cam.position.set(p.x + out.x * 60, p.y + 75, p.z + out.z * 60);
+      cam.lookAt(p.x - out.x * 30, p.y, p.z - out.z * 30);
+    }
     cam.updateMatrixWorld();
     cam.aspect = w / h;
     cam.updateProjectionMatrix();
+    const cond = `${start.tod || 'noon'}|${start.weather || 'clear'}`;
+    if (this._previewCond !== cond) {
+      this._previewCond = cond;
+      world.env.setConditions(start.tod || 'noon', start.weather || 'clear');
+    }
+    // Activity markers (light columns, rings, labels) stay out of the stills.
+    const markers = this.activities && this.activities.markers.group;
+    const markersVis = markers && markers.visible;
+    if (markers) markers.visible = false;
+    const stage = start.stage ? new THREE.Group() : null;
+    if (stage) {
+      start.stage(stage);
+      this.scene.add(stage);
+    }
     const vis = world.gen.staticMeshes.map((m) => m.visible);
     for (const m of world.gen.staticMeshes) m.visible = true;
     world.env.update(0, p, cam);
@@ -951,6 +1000,9 @@ export class Game {
     rt.dispose();
     world.gen.staticMeshes.forEach((m, i) => (m.visible = vis[i]));
     world.props.dirty = true;
+    if (stage) this.scene.remove(stage);
+    if (markers) markers.visible = markersVis;
+    if (!this._previewBatch) this.restorePreviewConditions();
     const c = document.createElement('canvas');
     c.width = w;
     c.height = h;

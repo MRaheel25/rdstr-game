@@ -222,13 +222,27 @@ export class Renderer {
     this.camera.updateProjectionMatrix();
   }
 
+  // Bloom follows the light: full glow at night (lamps, neon), restrained in daylight so sun
+  // highlights on glossy paint and the headlights don't bloom the car white. night: 0..1.
+  setDaylight(night) {
+    const day = 1 - Math.min(1, Math.max(0, night));
+    this.dayBloom = { intensity: 1.15 - 0.75 * day, threshold: 0.92 + 0.07 * day };
+    if (!this.studio) this.applyBloom();
+  }
+
+  applyBloom() {
+    const b = this.studio ? { intensity: 0.3, threshold: 0.97 } : this.dayBloom || { intensity: 1.15, threshold: 0.92 };
+    this.bloom.intensity = b.intensity;
+    this.bloom.luminanceMaterial.threshold = b.threshold;
+  }
+
   // Showroom grading: neutral colours, gentle bloom, light vignette (clean studio look).
   setStudio(on) {
     const u = this.grade.uniforms;
     u.get('tone').value = on ? 0 : 1;
     u.get('saturation').value = on ? 1.04 : 1.18;
-    this.bloom.intensity = on ? 0.3 : 1.15;
-    this.bloom.luminanceMaterial.threshold = on ? 0.97 : 0.92;
+    this.studio = on;
+    this.applyBloom();
     this.vignette.darkness = on ? 0.28 : 0.52;
   }
 

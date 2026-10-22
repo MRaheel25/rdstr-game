@@ -126,7 +126,8 @@ export class ActivityManager {
   update(realDt) {
     const g = this.game;
     this.ui.pollPad(g.input);
-    this.markers.update(realDt, g.camera.position);
+    const mission = this.active && this.active.def && this.active.def.kind !== 'race';
+    this.markers.update(realDt, g.camera.position, g.mode === 'career' || mission);
     if (g.state !== 'playing') return;
     if (!this.active) {
       this.updateFreeRoam();

@@ -140,11 +140,13 @@ export class MarkerSystem {
     for (const it of [...this.items]) it.remove();
   }
 
-  update(dt, camPos) {
+  update(dt, camPos, columns = true) {
     this.time += dt;
     const t = this.time;
     for (const it of this.items) {
       if (!it.root.visible) continue;
+      // Light columns belong to Missions / Career only; elsewhere the ring and label remain.
+      if (it.kind === 'column') it.root.children[0].visible = columns;
       it.mat.uniforms.time.value = t;
       // Fade the column out when the camera is inside it (it would wash the whole screen).
       const p = it.root.position;

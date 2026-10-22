@@ -61,6 +61,26 @@ UPDATE_V3.md replaces UPDATE_V2.md Part 2. Smoke tests: `SCEN=./v3.mjs EXTRA='&m
   as the basic version from M1 (no police, no damage, speed cap); Heist / Career mode cards open the existing mission list.
 - **Next:** V3 M9, starting with Kids Mode challenges.
 
+## Playtest fixes (after M8)
+- Speed / throttle: `startPlay` set `player.speedCap = 0` outside Kids Mode and `Vehicle` read 0 as a 0 m/s cap,
+  which cut all wheel drive (only Shift / thrusters moved the car) in every mode started from the menu. Now
+  `Infinity` outside Kids Mode (Kids keeps 27 m/s), `Vehicle` treats 0 / null as no cap, and `startPlay` clears any
+  stale `inputLock`. The drive curve is a single constant-power curve (no gears) up to the drag-limited top speed.
+- Menus: light-theme overrides for every pale text rule (select values, numbers, kbd, notes, stars, career line,
+  list details, confirm / info panels, name input).
+- Card stills: `ui/PreviewShots.js` gives each mode, district and race track a hand-picked camera, bright daylight
+  (tracks use their own conditions) and a temporary stage (start gantry + rival grid, taxi + waving passenger +
+  stand sign, balloons + bright cars in the park, Meridian Bank + cruisers, skyline over the bay, cranes, ring deck,
+  canyon lookout, promenade). `Game.renderPreviews()` switches conditions once per batch and restores them. Each
+  card has a colour accent (`--card-accent`); the card row shrinks to fit the screen (scrolls only on phones,
+  without a scrollbar).
+- Marker light columns render only in Missions / Career (`game.mode === 'career'`, set for CONTINUE and job
+  lists) or during an active mission; Race, Taxi, Kids and Free Roam keep just the ground ring and label.
+- HUD: the player name tag and the GPS distance sit in the bottom-left stack above the heat stars (no overlap).
+- Daylight: bloom intensity / threshold follow the time of day (`Renderer.setDaylight`), headlight emissive and
+  paint env reflections are toned down in the sun (`CAR_LIGHTING.day`).
+- Smoke: `SCEN=./playtest.mjs EXTRA='&menu=1' node tools/smoke.mjs fixes screenshots/fix`.
+
 ## V3 M8 results
 - `game/Taxi.js`: 10-minute shift (PLAY > TAXI, or stop at one of 8 taxi stands shown on the minimap and map). A
   passenger (one instance of the pedestrian mesh, waving) waits at the kerb 140-420 m away with a yellow light column and

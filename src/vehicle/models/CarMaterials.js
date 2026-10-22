@@ -3,6 +3,10 @@
 import * as THREE from 'three';
 import { RNG } from '../../util/math.js';
 
+// Daylight level (0 night .. 1 noon), set by the world when conditions change: car lamps and
+// paint reflections are toned down in the sun so the car reads as glossy paint, not a glow.
+export const CAR_LIGHTING = { day: 0 };
+
 export const PAINTS = {
   pearlWhite: { label: 'Pearl White', color: 0xe9e7e1, metalness: 0.35, roughness: 0.3, clearcoat: 1, flake: 0.25 },
   redMulti: { label: 'Red Multi-Coat', color: 0x9a0b10, metalness: 0.55, roughness: 0.28, clearcoat: 1, flake: 0.5 },
