@@ -220,6 +220,7 @@ export class Game {
     this.world.update(dt, this.playerVisual.root.position, this.camera, this.player.velocity);
     this.playerVisual.root.updateMatrixWorld();
     this.vfx.updateJets(dt, this.player);
+    this.player.wetGrip = this.isWet() ? 0.84 : 1;
     this.playerFX.update(dt, { wet: this.isWet() });
     this.updateSmokeLighting(realDt);
     this.vfx.update(dt, realDt);
@@ -289,6 +290,7 @@ export class Game {
     c.pitch = a.pitch;
     c.yaw = a.yaw;
     c.roll = a.roll;
+    this.flightAssist(realDt);
     const e = this.player.energy;
     e.ghost = i.down('ghost') && e.battery > 0.5;
     if (this.inputLock) {
@@ -462,6 +464,7 @@ export class Game {
     this.updateWater(realDt);
     this.updateAirStations();
     this.services.update(realDt);
+    this.updateLandingPreview();
     this.peds.update(dt, realDt);
     this.pursuitActive = this.heat.phase !== 'none';
     if (this.player.hp <= 0 && !this.player.wrecked) this.onPlayerWrecked();
@@ -718,8 +721,102 @@ export class Game {
     }
     this.activities.teleport(new THREE.Vector3(spot.x, spot.y || 0, spot.z), spot.yaw);
     this.hud.show(true);
+    this.hud.setPlayerName(this.progress.playerName);
     this.pendingActivity = activity;
     this.playIntro();
+  }
+
+  // V2 Assisted Flight (Settings > Controls, on by default). In the air the car holds itself
+  // level; Space lifts, Shift boosts, a tap of Q / E does a full barrel roll and W / S a full
+  // flip, then the car levels out again. Pro Flight keeps the manual controls (with gentle
+  // stabilisation). Either way the car straightens up before it lands.
+  flightAssist(realDt) {
+    const v = this.player;
+    const c = v.controls;
+    const i = this.input;
+    const assist = this.settings.get('flightAssist') !== false;
+    v.flightAssist = assist;
+    const air = v.groundedCount === 0 && v.airTime > 0.1;
+    v.airAssist = { on: air, strength: assist ? 1 : 0.12, landing: 0 };
+    if (!air) {
+      this.maneuver = null;
+      return;
+    }
+    if (!assist) return;
+    // One-key moves.
+    if (!this.maneuver) {
+      const k = i.pressed('rollLeft') ? ['roll', -1] : i.pressed('rollRight') ? ['roll', 1] : i.pressed('throttle') ? ['pitch', 1] : i.pressed('brake') ? ['pitch', -1] : null;
+      if (k) this.maneuver = { axis: k[0], dir: k[1], angle: 0, t: 0 };
+    }
+    c.pitch = 0;
+    c.roll = 0;
+    const m = this.maneuver;
+    if (m) {
+      // Integrate the rotation about the manoeuvre axis (local frame).
+      const av = v.body.angvel();
+      const w = new THREE.Vector3(av.x, av.y, av.z).applyQuaternion(v.quaternion.clone().invert());
+      m.angle += Math.abs(m.axis === 'roll' ? w.z : w.x) * realDt;
+      m.t += realDt;
+      if (m.axis === 'roll') c.roll = m.dir;
+      else c.pitch = m.dir;
+      if (m.angle > Math.PI * 2 - 0.7 || m.t > 3) this.maneuver = null;
+    }
+    v.airAssist.strength = m ? 0 : 1;
+  }
+
+  // Landing preview: ballistic path of the car until it hits the ground, with a ring marker
+  // (green = upright, amber = will land badly). Also tells the stabiliser time-to-land.
+  updateLandingPreview() {
+    const v = this.player;
+    if (!this.landMark) {
+      const geo = new THREE.RingGeometry(1.7, 2.2, 40).rotateX(-Math.PI / 2);
+      this.landMark = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x6cff8f, transparent: true, opacity: 0.8, depthWrite: false }));
+      const dot = new THREE.Mesh(new THREE.CircleGeometry(0.35, 16).rotateX(-Math.PI / 2), this.landMark.material);
+      this.landMark.add(dot);
+      this.landMark.renderOrder = 3;
+      this.landMark.userData.noCollider = true;
+      this.scene.add(this.landMark);
+    }
+    const mk = this.landMark;
+    const air = v.groundedCount === 0 && v.airTime > 0.15 && this.state === 'playing';
+    if (!air) {
+      mk.visible = false;
+      return;
+    }
+    this.landTimer = (this.landTimer || 0) - 1;
+    if (this.landTimer > 0 && mk.visible) return;
+    this.landTimer = 2;
+    const p = v.position.clone();
+    const vel = v.velocity.clone();
+    const dir = new THREE.Vector3();
+    const step = 0.08;
+    let hit = null;
+    let t = 0;
+    for (; t < 4; t += step) {
+      const nv = vel.clone();
+      nv.y -= 9.81 * step;
+      dir.copy(nv).multiplyScalar(step);
+      const len = dir.length();
+      if (len < 1e-4) break;
+      const h = this.physics.raycast(p, dir.clone().divideScalar(len), len + 0.6, v.wheelQueryGroups, v.body);
+      if (h) {
+        hit = p.clone().addScaledVector(dir, h.timeOfImpact / len);
+        hit.n = h.normal;
+        break;
+      }
+      p.add(dir);
+      vel.copy(nv);
+    }
+    if (!hit) {
+      mk.visible = false;
+      return;
+    }
+    mk.visible = true;
+    mk.position.set(hit.x, hit.y + 0.08, hit.z);
+    const good = v.up.y > 0.8;
+    mk.material.color.set(good ? 0x6cff8f : 0xffb02e);
+    mk.scale.setScalar(1 + Math.min(1.5, t * 0.4));
+    if (v.airAssist) v.airAssist.landing = t;
   }
 
   // V2: time of day + weather (saved, applied to sky, lights, fog, rain, roads).
@@ -849,6 +946,11 @@ export class Game {
     fx.rainLens += ((raining && p.speed > 12 ? Math.min(1, p.speed / 60) : 0) - fx.rainLens) * Math.min(1, realDt * 2);
     const hpFrac = p.hp / p.maxHp;
     fx.damage = hpFrac < 0.3 ? (0.25 + 0.25 * Math.sin(this.time * 6)) * (1 - hpFrac / 0.3) : 0;
+    // V2 visible damage: smoke from under the hood below 50% chassis, darker and thicker lower.
+    if (hpFrac < 0.5 && !p.wrecked && Math.random() < realDt * (6 + (0.5 - hpFrac) * 30)) {
+      const hood = p.position.clone().addScaledVector(p.forward, 1.3).addScaledVector(p.up, 0.7);
+      this.vfx.tireSmoke(hood, p.velocity.clone().multiplyScalar(0.6).add(new THREE.Vector3(0, 1.6, 0)), 0.5 + (0.5 - hpFrac), hpFrac < 0.25 ? [0.12, 0.12, 0.12] : [0.45, 0.45, 0.47]);
+    }
   }
 
   // Automatic quality drop if FPS stays under 45 for 5 seconds.

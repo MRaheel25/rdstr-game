@@ -364,7 +364,8 @@ export class Vehicle {
       const vS = _vel.dot(_ws);
       const fz = w.load;
       const massShare = fz / GRAVITY;
-      const grip = cfg.tire.mu * mode.grip[axle] * this.gripMul * surfaceGrip(w.surface) * (w.popped ? 0.45 : 1) *
+      const wet = this.wetGrip !== undefined && (w.surface === 'asphalt' || !w.surface) ? this.wetGrip : 1;
+      const grip = cfg.tire.mu * mode.grip[axle] * this.gripMul * surfaceGrip(w.surface) * wet * (w.popped ? 0.45 : 1) *
         (L.boost > 0 ? 1.2 : 1);
       const fxMax = grip * fz;
       const fyMax = grip * fz;
@@ -492,6 +493,17 @@ export class Vehicle {
       body.applyImpulseAtPoint(rv(_imp), rp(_pt), true);
     }
 
+    // V2: off-road rolling resistance (grass / dirt slow the car), so the road is the fast line.
+    let soft = 0;
+    for (const w of this.wheels) if (w.grounded && (w.surface === 'grass' || w.surface === 'dirt')) soft++;
+    this.offroad = soft / 4;
+    if (soft && this.speed > 1) {
+      const k = (w0) => (w0 === 'grass' ? 0.55 : 0.4);
+      const drag = this.mass * k(this.wheels.find((w) => w.grounded && (w.surface === 'grass' || w.surface === 'dirt')).surface) * (soft / 4) * Math.min(1, this.speed / 8);
+      _imp.set(this.velocity.x, 0, this.velocity.z).normalize().multiplyScalar(-drag * dt * 1.6);
+      body.applyImpulse(rv(_imp), true);
+    }
+
     // --- thrusters (Roadster SpaceX package) ---------------------------------------
     this.thrust.rocket = 0;
     this.thrust.hover = 0;
@@ -500,6 +512,27 @@ export class Vehicle {
     this.thrust.yaw = 0;
     this.thrust.roll = 0;
     if (cfg.thrusters && energy) this.applyThrusters(dt, c, energy, grounded);
+
+    // V2 air stabilisation: hold the car level (Assisted Flight), gently in Pro Flight, and
+    // harder in the last second before landing so landings are usually clean.
+    const aa = this.airAssist;
+    if (grounded === 0 && aa && aa.on && aa.strength > 0 && !this.wrecked && !(energy && energy.emp)) {
+      const s = aa.strength * (aa.landing > 0 && aa.landing < 0.9 ? 2.2 : 1);
+      _tmp.set(0, 1, 0);
+      const err = _tmp2.crossVectors(_up, _tmp); // axis * sin(angle) that rotates up -> world up
+      if (_up.y < 0) {
+        // Upside down: full push, rolling about the nose if exactly inverted.
+        const l = err.length();
+        if (l < 0.05) err.copy(_fwd);
+        else err.divideScalar(l);
+      }
+      const av = body.angvel();
+      const w = _vel.set(av.x, av.y, av.z);
+      w.addScaledVector(_tmp, -w.dot(_tmp)); // leave yaw alone
+      const I = cfg.inertia ? (cfg.inertia[0] + cfg.inertia[2]) / 2 : this.mass;
+      const tq = err.multiplyScalar(9).addScaledVector(w, -3.2).multiplyScalar(I * s * dt);
+      body.applyTorqueImpulse(rv(tq), true);
+    }
 
     // Airborne bookkeeping.
     if (grounded === 0) {

@@ -127,4 +127,68 @@ export default {
       log(type, await page.evaluate(() => JSON.stringify({ battery: Math.round(__game.player.energy.battery), hp: Math.round(__game.player.hp / __game.player.maxHp * 100), cash: __game.progress.cash })));
     }
   },
+  // M4: HUD, assisted flight + landing preview, damage visuals, HUD layouts.
+  async m4({ page, sleep, shot, log }) {
+    await page.evaluate(() => { __game.progress.setPlayerName('VOLT'); __game.startPlay({ district: 'downtown', tod: 'noon', weather: 'clear' }); });
+    await sleep(1500);
+    await page.keyboard.press('Enter');
+    await sleep(5000);
+    await page.keyboard.press('h');
+    // Assisted vs Pro vs no stabilisation: launch tilted 0.9 rad, 25 m up, simulate 2 s.
+    const res = await page.evaluate(() => {
+      const g = __game;
+      const out = {};
+      for (const mode of ['assist', 'pro', 'none']) {
+        g.settings.set('flightAssist', mode === 'assist');
+        g.test.teleport(2.6, 26, 40, 0, 20);
+        const b = g.player.body;
+        const q = { x: 0, y: 0, z: Math.sin(0.45), w: Math.cos(0.45) };
+        b.setRotation(q, true);
+        const r = g.test.simulate(2.0, (c) => { if (mode !== 'none') g.flightAssist(1 / 120); else g.player.airAssist = null; });
+        out[mode] = +r.final.upY.toFixed(3);
+      }
+      g.settings.set('flightAssist', true);
+      // Leave the car in the air for the screenshot.
+      g.test.teleport(2.6, 20, 40, 0, 18);
+      g.player.energy.battery = 22;
+      g.player.hp = g.player.maxHp * 0.3;
+      g.test.simulate(0.4, () => g.flightAssist(1 / 120));
+      return out;
+    });
+    log('upY after 2 s', JSON.stringify(res));
+    await sleep(1500);
+    log('mark', await page.evaluate(() => __game.landMark && __game.landMark.visible));
+    await shot('air');
+    await page.evaluate(() => __game.test.simulate(3, () => __game.flightAssist(1 / 120)));
+    await sleep(3000);
+    log('after', await page.evaluate(() => JSON.stringify({ upY: __game.player.up.y, ground: __game.player.groundedCount })));
+    await shot('damage');
+    await page.evaluate(() => { __game.settings.setHud('position', 'side'); __game.hud.applyLayout(); });
+    await sleep(800);
+    await shot('side');
+    await page.evaluate(() => { __game.settings.setHud('position', 'top'); __game.settings.setHud('minimap', false); __game.hud.applyLayout(); });
+    await sleep(800);
+    await shot('top');
+    await page.evaluate(() => { __game.settings.setHud('position', 'bottom'); __game.settings.setHud('minimap', true); __game.hud.applyLayout(); });
+  },
+  async m4roll({ page, sleep, log }) {
+    await page.evaluate(() => __game.startPlay({ district: 'downtown' }));
+    await sleep(1500);
+    await page.keyboard.press('Enter');
+    await sleep(1500);
+    log(await page.evaluate(() => {
+      const g = __game;
+      const out = {};
+      for (const axis of ['roll', 'pitch']) {
+        g.test.teleport(2.6, 60, 40, 0, 10);
+        g.test.simulate(0.3, () => g.flightAssist(1 / 120));
+        g.maneuver = { axis, dir: 1, angle: 0, t: 0 };
+        let minUp = 1;
+        let doneAt = null;
+        g.test.simulate(3.5, (c, t) => { g.flightAssist(1 / 120); minUp = Math.min(minUp, g.player.up.y); if (!g.maneuver && doneAt === null) doneAt = t; });
+        out[axis] = { minUp: +minUp.toFixed(2), doneAt: doneAt && +doneAt.toFixed(2), endUp: +g.player.up.y.toFixed(3) };
+      }
+      return JSON.stringify(out);
+    }));
+  },
 };

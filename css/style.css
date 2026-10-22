@@ -424,3 +424,39 @@ kbd { font-family: var(--mono); font-size: 10px; color: #9fb2c8; border: 1px sol
   .info-grid { grid-template-columns: 1fr; }
   .menu-item.card { width: 170px; }
 }
+
+/* ---------------- HUD (V2) ---------------- */
+#hp-bar { display: none; }
+#energy-readout .batt, #energy-readout .copv { display: none; }
+#cluster { position: absolute; display: flex; gap: 10px; align-items: flex-end; }
+#hud.pos-bottom #cluster { left: 50%; bottom: 18px; transform: translateX(-50%); flex-direction: row; }
+#hud.pos-side #cluster { right: 330px; bottom: 26px; flex-direction: column; align-items: flex-end; }
+#hud.pos-top #cluster { left: 50%; top: 14px; transform: translateX(-50%); flex-direction: row; align-items: flex-start; }
+#hud.pos-top #top-center { top: 96px; }
+#hud.pos-bottom #warnings { bottom: 112px; }
+.gt {
+  display: flex; align-items: center; gap: 9px; width: 168px; padding: 8px 12px 8px 10px;
+  background: var(--glass); border-left: 2px solid var(--gt, var(--lime));
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+  --gt: #6cff8f;
+}
+.gt svg { width: 26px; height: 26px; flex: 0 0 26px; fill: none; stroke: var(--gt); stroke-width: 1.6; filter: drop-shadow(0 0 4px var(--gt)); }
+.gt svg .ic-fill { fill: var(--gt); stroke: none; }
+.gt-body { flex: 1; min-width: 0; }
+.gt-head { display: flex; justify-content: space-between; font-size: 10px; letter-spacing: 2.5px; color: rgba(238,244,255,0.75); }
+.gt-head b { font-family: var(--mono); font-size: 13px; letter-spacing: 0; color: #fff; }
+.gt-bar { position: relative; height: 7px; margin-top: 5px; background: rgba(255,255,255,0.08); transform: skewX(-20deg); overflow: hidden; }
+.gt-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: var(--gt); box-shadow: 0 0 10px var(--gt); transition: width 0.15s; }
+.gt-bar::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 9px, rgba(0,0,0,0.55) 9px 11px); }
+.gt-sub { font-family: var(--mono); font-size: 10px; color: rgba(238,244,255,0.6); margin-top: 3px; min-height: 12px; white-space: nowrap; }
+.gt.mid { --gt: #ffd23f; }
+.gt.low { --gt: var(--red); animation: gtPulse 0.7s infinite alternate; }
+@keyframes gtPulse { from { box-shadow: inset 0 0 0 rgba(255,59,74,0); } to { box-shadow: inset 0 0 22px rgba(255,59,74,0.45); } }
+.gt.copv.firing svg { stroke: #fff; }
+#thrust-view { width: 120px; height: 120px; display: block; }
+#hud.pos-side #thrust-view { order: -1; }
+#player-tag { position: absolute; left: 22px; bottom: 246px; font-size: 11px; letter-spacing: 4px; color: var(--cyan); font-weight: 800; }
+#player-tag:empty { display: none; }
+#hud.hide-speed #bottom-right, #hud.hide-battery .gt.batt, #hud.hide-health .gt.hp,
+#hud.hide-thrusters .gt.copv, #hud.hide-thrusters #thrust-view, #hud.hide-minimap #minimap, #hud.hide-score #style-score { display: none !important; }
+#landing-mark { display: none; }

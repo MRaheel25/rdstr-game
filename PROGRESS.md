@@ -48,10 +48,30 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 - [x] **V2 M1 — Title screen and main menu** (see "V2 M1 results")
 - [x] **V2 M2 — Daylight, weather and lighting quality** (see "V2 M2 results")
 - [x] **V2 M3 — City overhaul (roads, districts, landmarks, people, Grafigator)** (see "V2 M3 results")
-- [ ] V2 M4 — HUD, thruster control, physics and feedback
-- Part 2 (M5-M8) not started.
+- [x] **V2 M4 — HUD, thruster control, physics and feedback** (see "V2 M4 results")
+- **Part 1 (M1-M4) complete.** Part 2 (M5-M8) not started.
 - V2 smoke test: `SCEN=./v2.mjs EXTRA='&menu=1' node tools/smoke.mjs m<N> screenshots/v2m<N>` (scenarios `m1`..`m4` in `tools/v2.mjs`).
-- **Next:** V2 M4 (HUD, thruster control, physics and feedback).
+- **Next:** Part 2, starting with V2 M5 (Garage upgrades and paint). Kids Mode (M6) should set `game.kidsMode = true` (pedestrians already honour it).
+
+## V2 M4 results
+- HUD (`ui/HUD.js`, css "HUD (V2)"): cut-corner gauge tiles with icons for Battery (temperature sub-line), Chassis
+  and Thrusters (COPV pressure + which system is firing). Green -> yellow -> red with a pulsing glow when low. A
+  thruster view draws the car from above with the rear rockets, the four hover jets and the RCS nozzles lighting up as
+  they fire, inside a COPV pressure ring. The speed arc gauge stays. Player name tag above the minimap.
+- Settings > HUD now works: show / hide speedometer, battery, health, thrusters, minimap, score; gauge position bottom
+  (centre row), side (stack beside the speedometer) or top. `HUD.applyLayout()`.
+- Assisted Flight (default; Settings > Controls > Flight mode): `Game.flightAssist()` + Vehicle air stabilisation hold
+  the car level in the air (yaw untouched). Space = lift, Shift = boost, tap Q / E = full barrel roll, tap W / S = full
+  flip, then it levels out. Pro Flight keeps the manual controls with gentle stabilisation. Both straighten up harder
+  in the last 0.9 s before landing. Measured (test stepping): tilted 52° -> upright in 2 s with Assist (Pro 0.98 up,
+  none 0.62); barrel roll done in 2.1 s and flip in 2.4 s, both ending level.
+- Landing preview: ballistic path ray-cast every other frame while airborne; ring marker on the ground (green upright,
+  amber if the car would land badly), size grows with time to impact.
+- Physics: visual body pitch under braking / acceleration and body roll in corners on a spring-damper (wheels stay
+  planted); off-road rolling resistance on grass / dirt on top of the lower grip; asphalt grip x0.84 in the rain.
+- Damage on the model: clearcoat dulls and paint roughens with damage, hood smoke below 50% chassis (black below
+  25%), left headlight breaks and the right one flickers above 60% damage (plus the V1 dents, cracked glass and the
+  splitter falling off).
 
 ## V2 M3 results
 - Roads: grid streets 20 m (4 lanes, 4.7 m lanes), the two central boulevards (x = 0, z = 0) 28 m with 6 lanes; the

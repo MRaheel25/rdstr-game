@@ -456,9 +456,42 @@ export class RoadsterModel extends CarVisual {
     this.mats.head.color.setRGB(1, 0.97, 0.92).multiplyScalar(6 * st.lights);
     this.mats.reverse.color.setRGB(1, 1, 1).multiplyScalar(v.reversing ? 4 * st.lights : 0.15);
     for (const h of this.headlights) h.intensity = 380 * st.lights * (ctx.headlights === false ? 0 : 1);
+    // V2 body motion: the shell pitches under braking / acceleration and rolls in corners on
+    // a spring-damper (wheels stay planted), so weight transfer is visible.
+    if (!sr) {
+      const fwd = v.fwdSpeed || 0;
+      const accel = dt > 0 ? (fwd - (st.lastFwd ?? fwd)) / dt : 0;
+      st.lastFwd = fwd;
+      st.accelF = damp(st.accelF || 0, clamp(accel, -25, 25), 8, dt);
+      const lat = (v.yawRate ?? (v.body ? v.body.angvel().y : 0)) * fwd;
+      st.accelL = damp(st.accelL || 0, clamp(-lat, -25, 25), 8, dt);
+      const onGround = v.groundedCount >= 3;
+      const tp = onGround ? clamp(st.accelF * 0.0028, -0.045, 0.035) : 0;
+      const tr = onGround ? clamp(st.accelL * 0.0024, -0.05, 0.05) : 0;
+      for (const [k, target] of [['p', tp], ['r', tr]]) {
+        const vk = `${k}v`;
+        st[vk] = (st[vk] || 0) + ((target - (st[k] || 0)) * 140 - (st[vk] || 0) * 14) * dt;
+        st[k] = (st[k] || 0) + st[vk] * dt;
+      }
+      this.shell.rotation.x = st.p;
+      this.shell.rotation.z = st.r;
+      this.shell.position.y = GROUND - Math.abs(st.r) * 0.3 - Math.max(0, -st.p) * 0.4;
+    }
     // Damage visuals.
     const dmg = 1 - v.hp / v.maxHp;
     st.damage = dmg;
+    // Scratches: the clearcoat dulls and the paint gets rougher as damage builds up.
+    if (!this.paintTween && Math.abs((st.paintDmg ?? -1) - dmg) > 0.02) {
+      st.paintDmg = dmg;
+      const pr = PAINTS[this.paintKey] || PAINTS.pearlWhite;
+      this.paint.roughness = Math.min(0.9, pr.roughness + dmg * 0.4);
+      this.paint.clearcoat = pr.clearcoat * (1 - dmg * 0.75);
+    }
+    // Broken headlight (left) at heavy damage, the right one flickers.
+    if (dmg > 0.6) {
+      this.headlights[0].intensity = 0;
+      if (Math.random() < 0.08) this.headlights[1].intensity *= 0.2;
+    }
     if (this.crack) this.crack.material.opacity = clamp((dmg - 0.3) * 1.6, 0, 0.85);
     if (this.splitter.visible && dmg > 0.55) {
       this.splitter.visible = false;
