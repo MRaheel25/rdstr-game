@@ -47,6 +47,7 @@ export const DEFAULT_BINDINGS = {
   pause: ['Escape'],
   help: ['KeyH'],
   xray: ['KeyX'],
+  map: ['KeyM'],
   fps: ['F8'],
   colliders: ['F9'],
 };
@@ -57,7 +58,7 @@ export const ACTION_LABELS = {
   rollLeft: 'Air Roll Left', rollRight: 'Air Roll Right', ghost: 'Ghost Mode',
   modeTrack: 'Mode: Track', modeDrift: 'Mode: Drift', modeFlight: 'Mode: Flight',
   camera: 'Camera', doors: 'Doors', reset: 'Reset Car', photo: 'Photo Mode', pause: 'Pause',
-  help: 'Show / Hide Controls', xray: 'X-Ray View', fps: 'FPS Counter', colliders: 'Collider Debug',
+  help: 'Show / Hide Controls', xray: 'X-Ray View', map: 'Map', fps: 'FPS Counter', colliders: 'Collider Debug',
 };
 
 const DEFAULTS = {

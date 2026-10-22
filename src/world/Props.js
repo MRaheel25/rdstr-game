@@ -77,6 +77,26 @@ export class Props {
 
   // Build instanced meshes after all props are placed. Only props near the camera are
   // written into the instance buffers (refreshed a few times per second).
+  // Remove props inside a circle (before build), e.g. to clear room for a landmark.
+  removeNear(x, z, r) {
+    const keep = (it) => Math.hypot(it.x - x, it.z - z) > r;
+    for (const it of this.items) {
+      if (keep(it) || !it.collider) continue;
+      this.physics.meta.delete(it.collider.handle);
+      this.physics.world.removeCollider(it.collider, false);
+      it.collider = null;
+    }
+    this.items = this.items.filter(keep);
+    this.lamps = this.lamps.filter(keep);
+    this.signals = this.signals.filter(keep);
+    for (const [k, list] of this.grid) this.grid.set(k, list.filter(keep));
+    for (const [name, list] of this.byType) {
+      const kept = list.filter(keep);
+      kept.forEach((it, i) => (it.index = i));
+      this.byType.set(name, kept);
+    }
+  }
+
   build() {
     for (const [name, list] of this.byType) {
       const type = this.types[name];

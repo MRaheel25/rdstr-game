@@ -4,12 +4,15 @@
 import { LAND } from '../world/Layout.js';
 
 const PX = 0.5; // pixels per metre in the pre-rendered layer
-const POI_STYLE = {
+export const POI_STYLE = {
   police: { icon: 'P', bg: '#2a5cff', fg: '#fff' },
   charge: { icon: '⚡', bg: '#0c3a48', fg: '#40e8ff' },
   repair: { icon: 'R', bg: '#e07020', fg: '#fff' },
   tuning: { icon: 'T', bg: '#7a2ae0', fg: '#fff' },
   grafigator: { icon: 'G', bg: '#15171a', fg: '#e7f75b' },
+  taxi: { icon: 'T', bg: '#ffc21a', fg: '#111' },
+  mission: { icon: '◆', bg: '#ffd23f', fg: '#111' },
+  race: { icon: '⚑', bg: '#ff3df0', fg: '#fff' },
 };
 
 export class Minimap {
@@ -17,7 +20,7 @@ export class Minimap {
     this.world = world;
     this.canvas = document.getElementById('minimap');
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    this.size = 220;
+    this.size = 260;
     this.canvas.width = this.size * dpr;
     this.canvas.height = this.size * dpr;
     this.ctx = this.canvas.getContext('2d');
@@ -89,6 +92,48 @@ export class Minimap {
     this.layer = c;
   }
 
+  // Arrow at the rim (or a dot inside) pointing at a world position.
+  rimArrow(player, heading, z, wx, wz, color, label, t, onlyOff = false) {
+    const ctx = this.ctx;
+    const R = this.size / 2;
+    const dx = wx - player.position.x;
+    const dz = wz - player.position.z;
+    const c = Math.cos(heading);
+    const sn = Math.sin(heading);
+    let mx = (dx * c - dz * sn) * z;
+    let my = (dx * sn + dz * c) * z;
+    const d = Math.hypot(mx, my);
+    const lim = R - 16;
+    if (d <= lim) {
+      if (onlyOff) return;
+    } else {
+      mx *= lim / d;
+      my *= lim / d;
+    }
+    const a = Math.atan2(my, mx);
+    const pulse = 1 + 0.15 * Math.sin(t * 2);
+    ctx.save();
+    ctx.translate(R + mx, R + my);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 11 * pulse, Math.sin(a) * 11 * pulse);
+    ctx.lineTo(Math.cos(a + 2.4) * 9, Math.sin(a + 2.4) * 9);
+    ctx.lineTo(Math.cos(a - 2.4) * 9, Math.sin(a - 2.4) * 9);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fill();
+    if (label) {
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, -Math.cos(a) * 14, -Math.sin(a) * 14);
+    }
+    ctx.restore();
+  }
+
   setMission(m) {
     this.mission = m; // {x, z, label} or null
   }
@@ -97,7 +142,7 @@ export class Minimap {
     this.markers = list;
   }
 
-  update(player, police, heat, airStations) {
+  update(player, police, heat, airStations, nav = null) {
     const ctx = this.ctx;
     const S = this.size;
     const R = S / 2;
@@ -134,6 +179,18 @@ export class Minimap {
         ctx.fill();
       }
     }
+    // GPS route.
+    if (nav && nav.route.length > 1) {
+      ctx.strokeStyle = nav.color;
+      ctx.lineWidth = 7 / z;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.globalAlpha = 0.95;
+      ctx.beginPath();
+      nav.route.forEach((p, i) => (i ? ctx.lineTo(p.x, p.z) : ctx.moveTo(p.x, p.z)));
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     // Activity start markers: diamonds for missions, flags for races (dim when completed).
     for (const m of this.markers) {
       const s = 7 / z;
@@ -167,7 +224,7 @@ export class Minimap {
       ctx.stroke();
     }
     // Key locations: police station, charging, repair, tuning, landmark.
-    ctx.font = `bold ${9 / z}px sans-serif`;
+    ctx.font = `bold ${12 / z}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const p of this.world.gen.pois || []) {
@@ -180,7 +237,7 @@ export class Minimap {
       ctx.strokeStyle = '#000';
       ctx.lineWidth = 1.5 / z;
       ctx.beginPath();
-      ctx.arc(0, 0, 7 / z, 0, Math.PI * 2);
+      ctx.arc(0, 0, 10 / z, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = st.fg;
@@ -219,6 +276,21 @@ export class Minimap {
       ctx.fill();
     }
     ctx.restore();
+    // Low battery: arrow on the rim towards the nearest charging station.
+    if (player.energy && player.energy.battery < 25) {
+      let best = null;
+      let bd = Infinity;
+      for (const p of this.world.gen.pois || []) {
+        if (p.kind !== 'charge') continue;
+        const d = Math.hypot(p.x - player.position.x, p.z - player.position.z);
+        if (d < bd) {
+          bd = d;
+          best = p;
+        }
+      }
+      if (best) this.rimArrow(player, heading, z, best.x, best.z, '#40e8ff', '⚡', t);
+    }
+    if (nav && nav.target) this.rimArrow(player, heading, z, nav.target.x, nav.target.z, nav.color, '', t, true);
     // Mission marker (clamped to the rim).
     if (this.mission) {
       const dx = this.mission.x - player.position.x;

@@ -443,7 +443,7 @@ export class Menu {
 
   nextMission() {
     const p = this.game.progress;
-    return this.game.activities.defs.find((d) => d.kind === 'mission' && !(p.data.missions[d.id] && p.data.missions[d.id].done) && p.rep >= d.rep && p.districtOpen(d.district))
+    return this.game.activities.defs.find((d) => d.kind === 'mission' && !(p.data.missions[d.id] && p.data.missions[d.id].done) )
       || null;
   }
 
@@ -453,17 +453,27 @@ export class Menu {
     this.screen = 'play';
     this.enterShowroom('title');
     const modes = [
-      { id: 'free', label: 'FREE ROAM', sub: 'The open city with every feature: jobs, races, pursuits, stunts.', on: true },
-      { id: 'race', label: 'RACE', sub: 'Dedicated circuits with rival AI.', on: false },
-      { id: 'heist', label: 'HEIST', sub: 'Plan, rob, escape a city-wide chase.', on: false },
-      { id: 'career', label: 'CAREER', sub: '100+ tasks, levels and unlocks.', on: false },
-      { id: 'kids', label: 'KIDS', sub: 'Daylight, no police, easy fun.', on: false },
+      { id: 'free', label: 'FREE ROAM', sub: 'The open city with every feature: jobs, races, pursuits, stunts.' },
+      { id: 'race', label: 'RACE', sub: 'Circuits and sprints against rival drivers.' },
+      { id: 'heist', label: 'HEIST', sub: 'Grab the loot, escape a city-wide chase.' },
+      { id: 'career', label: 'CAREER', sub: 'Story jobs from CIPHER: getaways, data runs, bounties.' },
+      { id: 'taxi', label: 'TAXI', sub: 'Pick up fares, drive fast, earn tips.' },
+      { id: 'kids', label: 'KIDS', sub: 'Daylight, no police, no damage, easy fun.' },
     ];
+    // V3: every mode is open. Modes route to their own screens / setups.
+    const MODE_ACTION = {
+      race: () => (this.showRaceSetup ? this.showRaceSetup() : this.showList('race', 'title')),
+      heist: () => (this.showHeists ? this.showHeists() : this.showList('mission', 'title')),
+      career: () => (this.showCareer ? this.showCareer() : this.showList('mission', 'title')),
+      taxi: () => (this.game.startTaxi ? this.game.startTaxi() : this.game.startPlay({})),
+      kids: () => this.game.startPlay({ district: 'downtown', tod: 'noon', weather: 'clear', mode: 'kids' }),
+    };
     const items = modes.map((m) => ({
-      label: m.label, sub: m.on ? m.sub : 'COMING SOON', disabled: !m.on, cls: `card mode-${m.id}`,
+      label: m.label, sub: m.sub, cls: `card mode-${m.id}`,
       action: () => {
         this.playSetup = { mode: m.id };
-        this.showPlayStep2();
+        if (MODE_ACTION[m.id]) MODE_ACTION[m.id]();
+        else this.showPlayStep2();
       },
     }));
     this.render(`
@@ -485,7 +495,7 @@ export class Menu {
     const p = g.progress;
     this.previews = this.previews || {};
     const items = DISTRICTS.map((d) => {
-      const open = p.districtOpen(d.id) || d.id === 'waterfront';
+      const open = true;
       if (!this.previews[d.id]) {
         try {
           this.previews[d.id] = g.renderPreview(g.world.districtStart(d.id));
@@ -725,10 +735,8 @@ export class Menu {
     const defs = g.activities.defs.filter((d) => d.kind === kind);
     const items = defs.map((d) => {
       const rec = kind === 'race' ? p.data.races[d.id] : p.data.missions[d.id];
-      const districtOpen = p.districtOpen(d.district);
-      const repOk = p.rep >= d.rep;
       const dist = DISTRICT_UNLOCKS.find((x) => x.id === d.district);
-      const lockText = !districtOpen ? `Unlocks with ${dist.rep} rep` : !repOk ? `Requires ${d.rep} rep` : null;
+      const lockText = null; // V3: everything is open
       const best = rec && kind === 'race' && rec.bestTime != null ? ` · best ${fmt(rec.bestTime)}` : '';
       return {
         label: d.name.toUpperCase(),
@@ -1037,6 +1045,11 @@ export class Menu {
       } });
     }
     items.push(
+      { label: 'MAP', sub: 'Set a waypoint', action: () => {
+        this.close();
+        g.state = 'playing';
+        g.mapView.toggle(true);
+      } },
       { label: 'CONTROLS', action: () => this.showControls() },
       { label: 'SETTINGS', action: () => this.showSettings('pause') },
       { label: 'GARAGE', sub: 'Upgrades and paint', action: () => this.showGarage('pause') },

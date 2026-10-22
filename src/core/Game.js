@@ -37,6 +37,8 @@ import { ActivityManager } from '../game/Activities.js';
 import { Menu } from '../ui/Menu.js';
 import { XRay } from '../fx/XRay.js';
 import { Services } from '../game/Services.js';
+import { Navigation } from '../game/Navigation.js';
+import { MapView } from '../ui/MapView.js';
 import { Pedestrians } from '../world/Pedestrians.js';
 
 const _v = new THREE.Vector3();
@@ -137,6 +139,8 @@ export class Game {
     this.setupPursuitEvents();
     this.audio = new AudioSystem(this);
     this.services = new Services(this);
+    this.nav = new Navigation(this);
+    this.mapView = new MapView(this);
     this.peds = new Pedestrians(this);
     this.world.env.onLightning = (k) => {
       this.gfx.setFlash(0.28 * k, 0xdfe6ff);
@@ -231,7 +235,7 @@ export class Game {
     this.activities.update(realDt);
     this.score.update(realDt);
     this.xray.update(realDt);
-    if (this.frame % 2 === 0) this.minimap.update(this.player, this.police, this.heat, this.world.gen.airStations);
+    if (this.frame % 2 === 0) this.minimap.update(this.player, this.police, this.heat, this.world.gen.airStations, this.nav);
     this.banner.update(realDt);
     this.updateHints(realDt);
     this.updateFx(realDt);
@@ -266,6 +270,7 @@ export class Game {
     }
     if (this.state !== 'playing') return;
     if (i.pressed('xray')) this.xray.toggle();
+    if (i.pressed('map') && (this.state === 'playing' || this.mapView.open)) this.mapView.toggle();
     if (i.pressed('help')) {
       this.showHints = !this.showHints;
       this.hintsTimer = this.showHints ? 1e9 : 0;
@@ -291,6 +296,7 @@ export class Game {
     c.yaw = a.yaw;
     c.roll = a.roll;
     this.flightAssist(realDt);
+    if (this.player.speedCap && this.player.speed > this.player.speedCap) c.throttle = 0;
     const e = this.player.energy;
     e.ghost = i.down('ghost') && e.battery > 0.5;
     if (this.inputLock) {
@@ -464,6 +470,7 @@ export class Game {
     this.updateWater(realDt);
     this.updateAirStations();
     this.services.update(realDt);
+    this.nav.update(realDt);
     this.updateLandingPreview();
     this.peds.update(dt, realDt);
     this.pursuitActive = this.heat.phase !== 'none';
@@ -697,8 +704,13 @@ export class Game {
   }
 
   // ---- game flow: title -> (intro flyover) -> play; pause -> quit to title -----------------
-  startPlay({ continueStory = false, activity = null, district = null, tod = null, weather = null } = {}) {
+  startPlay({ continueStory = false, activity = null, district = null, tod = null, weather = null, mode = 'free' } = {}) {
     const m = this.menu;
+    // Kids Mode: daylight, no police, no damage, gentle speed.
+    this.mode = mode;
+    this.kidsMode = mode === 'kids';
+    this.player.noDamage = this.kidsMode;
+    this.player.speedCap = this.kidsMode ? 27 : 0;
     this.services.cancel();
     if (tod || weather) this.setConditions(tod || this.settings.get('tod'), weather || this.settings.get('weather'));
     m.close();

@@ -44,7 +44,36 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 | `ui/ActivityUI.js` | Briefing cards, results screen, race HUD, countdown, objective line |
 | `ai/Heat.js`, `ai/PoliceAI.js`, `ai/Radio.js` | Heat 0-5, evade/cooldown loop, busted timer; police units, roadblocks, spikes, heli, drones; dispatch subtitles |
 
-## Version 2 (UPDATE_V2.md) — branch `v2-part1`
+## Version 3 (UPDATE_V3.md) — branch `v3`
+UPDATE_V3.md replaces UPDATE_V2.md Part 2. Smoke tests: `SCEN=./v3.mjs EXTRA='&menu=1' node tools/smoke.mjs m<N> screenshots/v3m<N>`.
+- [x] **V3 M1 — Unlock everything, map and navigation** (see "V3 M1 results")
+- [ ] V3 M2 — Sound fix and music options
+- [ ] V3 M3 — Main menu first impression
+- [ ] V3 M4 — In-game HUD
+- [ ] V3 M5 — Thruster control and safe landings
+- [ ] V3 M6 — Realistic crashes and destruction
+- [ ] V3 M7 — Race mode
+- [ ] V3 M8 — Taxi mode
+- [ ] V3 M9 — Kids, Heist, Career, saves, garage
+- [ ] V3 M10 — Polish
+- **Next:** V3 M2.
+
+## V3 M1 results
+- No locks: `Progress.districtOpen()` is always true, briefings and lists never lock, every mode card is open (Free Roam,
+  Race, Heist, Career, Taxi, Kids; until their own milestones Race/Heist/Career open the existing race / mission lists,
+  Taxi starts free roam, Kids starts free roam with `game.kidsMode`: no police or heat, no damage, speed capped).
+- `ui/MapView.js`: full-screen map (M, or MAP in the pause menu; pauses the game): roads, parks, district and
+  neighbourhood names, icons with a legend (charging, repair, tuning, police, studio, taxi stands, mission / race
+  starts), player arrow, route. Hover shows names; click an icon or any spot to set a waypoint; drag pans, wheel zooms.
+- `game/Navigation.js`: waypoint + A* route over the road graph (re-planned every 1.5 s), glowing chevrons on the road
+  ahead (every 9 m out to ~170 m), route line on the minimap and the map, rim arrow when the target is off the minimap,
+  distance on the HUD, "ARRIVED" + optional callback. API: `game.nav.setWaypoint(x, z, label, {color, onArrive})`.
+- Minimap 260 px with bigger icons; below 25% battery a pulsing ⚡ rim arrow points to the nearest charging station.
+- Charging: every station has a 13 m lit "⚡ CHARGE" pylon with a beacon; `placeChargingHubs()` ray-casts for open flat
+  ground beside roads and adds 7 canopy hubs outside the grid (harbor x2, construction x2, canyon, waterfront,
+  highway), 11 stations in total. Verified headless: 42 charge bays registered, all with service points.
+
+
 - [x] **V2 M1 — Title screen and main menu** (see "V2 M1 results")
 - [x] **V2 M2 — Daylight, weather and lighting quality** (see "V2 M2 results")
 - [x] **V2 M3 — City overhaul (roads, districts, landmarks, people, Grafigator)** (see "V2 M3 results")

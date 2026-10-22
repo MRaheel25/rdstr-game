@@ -189,6 +189,10 @@ export class PoliceSystem {
   // ---- per frame ----------------------------------------------------------------
   update(dt, realDt) {
     const g = this.game;
+    if (g.kidsMode) {
+      if (this.units.length) this.clearAll();
+      return;
+    }
     const player = g.player;
     const heat = this.heat;
     const cfg = heat.config;

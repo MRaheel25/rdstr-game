@@ -85,7 +85,7 @@ export class ActivityManager {
       for (const d of this.defs) {
         if (!this.startMarkers.has(d.id)) continue;
         const rec = d.kind === 'race' ? this.progress.data.races[d.id] : this.progress.data.missions[d.id];
-        list.push({ x: d.start.x, z: d.start.z, color: d.kind === 'race' ? '#ff3df0' : '#ffd23f', done: !!(rec && rec.done), kind: d.kind });
+        list.push({ x: d.start.x, z: d.start.z, color: d.kind === 'race' ? '#ff3df0' : '#ffd23f', done: !!(rec && rec.done), kind: d.kind, label: d.name });
       }
     }
     this.game.minimap.setMarkers(list);
@@ -228,7 +228,7 @@ export class ActivityManager {
     g.state = 'briefing';
     g.audio && g.audio.ui('click');
     const record = def.kind === 'race' ? this.progress.data.races[def.id] : this.progress.data.missions[def.id];
-    const locked = this.progress.rep < def.rep ? `REQUIRES ${def.rep} REP  (YOU HAVE ${this.progress.rep})` : null;
+    const locked = null; // V3: nothing is locked
     this.ui.briefing(def, { kind: def.kind, record, districtName: this.districtName(def.district), locked }, {
       primary: () => {
         if (!locked) this.begin(def);

@@ -692,7 +692,7 @@ export class Vehicle {
   }
 
   damage(amount, source) {
-    if (amount <= 0) return;
+    if (amount <= 0 || this.noDamage) return;
     this.hp = Math.max(0, this.hp - amount * this.armor);
     if (source) {
       this.lastHitBy = source;

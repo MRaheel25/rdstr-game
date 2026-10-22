@@ -65,7 +65,7 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 #hp-bar .hp-fill { position: absolute; bottom: 0; left: 0; right: 0; height: 100%; background: linear-gradient(0deg, #ff3b4a, #ffd1a1 60%, #eef4ff); border-radius: 3px; transition: height 0.2s; }
 #hp-bar .hp-label { position: absolute; top: 100%; left: -6px; margin-top: 6px; font-size: 9px; letter-spacing: 2px; writing-mode: vertical-rl; transform: rotate(180deg); opacity: 0.7; }
 
-#bottom-left { position: absolute; left: 22px; bottom: 18px; width: 220px; }
+#bottom-left { position: absolute; left: 22px; bottom: 18px; width: 260px; }
 #heat { margin-bottom: 8px; }
 #heat .stars { font-size: 22px; letter-spacing: 4px; color: rgba(255, 255, 255, 0.18); height: 26px; }
 #heat .stars .on { color: #fff; text-shadow: 0 0 10px var(--red), 0 0 4px #fff; }
@@ -76,7 +76,7 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 #heat .evade-fill { position: absolute; inset: 0; width: 0%; background: var(--cyan); opacity: 0.75; }
 #heat .evade.cool .evade-fill { background: #7cff9b; }
 #heat .evade-label { position: absolute; inset: 0; font-size: 10px; letter-spacing: 3px; line-height: 14px; text-align: center; font-weight: 700; color: #fff; }
-#minimap { width: 220px; height: 220px; border-radius: 50%; display: block; }
+#minimap { width: 260px; height: 260px; border-radius: 50%; display: block; }
 
 #bottom-right { position: absolute; right: 22px; bottom: 14px; width: 300px; height: 300px; }
 #gauge { position: absolute; inset: 0; width: 300px; height: 300px; }
@@ -455,8 +455,33 @@ kbd { font-family: var(--mono); font-size: 10px; color: #9fb2c8; border: 1px sol
 .gt.copv.firing svg { stroke: #fff; }
 #thrust-view { width: 120px; height: 120px; display: block; }
 #hud.pos-side #thrust-view { order: -1; }
-#player-tag { position: absolute; left: 22px; bottom: 246px; font-size: 11px; letter-spacing: 4px; color: var(--cyan); font-weight: 800; }
+#player-tag { position: absolute; left: 22px; bottom: 286px; font-size: 11px; letter-spacing: 4px; color: var(--cyan); font-weight: 800; }
 #player-tag:empty { display: none; }
 #hud.hide-speed #bottom-right, #hud.hide-battery .gt.batt, #hud.hide-health .gt.hp,
 #hud.hide-thrusters .gt.copv, #hud.hide-thrusters #thrust-view, #hud.hide-minimap #minimap, #hud.hide-score #style-score { display: none !important; }
 #landing-mark { display: none; }
+
+/* ---------------- V3: GPS + full map ---------------- */
+#nav-dist { position: absolute; left: 22px; bottom: 306px; display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px;
+  background: var(--glass); font-size: 11px; letter-spacing: 2px; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+#nav-dist i { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 8px currentColor; }
+#nav-dist span { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(238,244,255,0.8); }
+#nav-dist b { font-family: var(--mono); font-size: 15px; color: #fff; letter-spacing: 0; }
+#mapview { position: fixed; inset: 0; z-index: 30; background: #050a12; }
+#mapview canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+#mapview .map-head { position: absolute; left: 28px; top: 22px; pointer-events: none; }
+#mapview .map-head b { display: block; font-family: var(--display); font-style: italic; font-size: 30px; letter-spacing: 6px; }
+#mapview .map-head span { font-size: 11px; letter-spacing: 3px; color: rgba(238,244,255,0.6); }
+#mapview .map-legend { position: absolute; right: 24px; top: 22px; width: 230px; padding: 16px 18px; background: var(--glass);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%); font-size: 13px; }
+#mapview .map-legend > div { display: flex; align-items: center; gap: 10px; margin: 7px 0; }
+#mapview .ico { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-style: normal; font-weight: 800; font-size: 12px; border: 1.5px solid #fff; }
+#mapview .ico.charge { background: #0c3a48; color: #40e8ff; } #mapview .ico.repair { background: #e07020; }
+#mapview .ico.tuning { background: #7a2ae0; } #mapview .ico.police { background: #2a5cff; }
+#mapview .ico.grafigator { background: #15171a; color: #e7f75b; } #mapview .ico.taxi { background: #ffc21a; color: #111; }
+#mapview .ico.mission { background: #ffd23f; color: #111; } #mapview .ico.race { background: #ff3df0; }
+#mapview .map-actions { flex-direction: column; align-items: stretch !important; margin-top: 14px !important; }
+#mapview button { pointer-events: auto; background: rgba(63,224,255,0.12); color: #fff; border: 1px solid var(--cyan-dim); padding: 8px; font: 700 11px var(--font); letter-spacing: 2px; cursor: pointer; }
+#mapview button:hover { background: rgba(63,224,255,0.3); }
+#mapview .map-tip { position: absolute; padding: 5px 10px; background: rgba(5,8,14,0.92); border-left: 2px solid var(--cyan); font-size: 12px; pointer-events: none; }
