@@ -14,7 +14,7 @@ import { TODS, WEATHERS, makePreset } from '../world/Environment.js';
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const TYPE = { getaway: 'GETAWAY', datarun: 'DATA RUN', bounty: 'BOUNTY', skygap: 'SKY GAP', ghost: 'GHOST PROTOCOL' };
 const DISTRICT_BLURB = {
-  downtown: 'Glass towers, neon and the GRAFIGATOR studio.', highway: 'Elevated six-lane ring around the city.',
+  downtown: 'Glass towers, neon and the shopping streets.', highway: 'Elevated six-lane ring around the city.',
   harbor: 'Containers, cranes and the piers.', construction: 'Half-built towers and the Broken Bridge.',
   canyon: 'Hairpins, tunnels and the lookout.', waterfront: 'The bay promenade.',
 };
@@ -607,7 +607,7 @@ export class Menu {
       ['STORY', `<p>Halcyon Bay never sleeps. You are <b>${esc(this.game.progress.playerName)}</b>, driver of a stolen prototype electric roadster with cold-gas thrusters: four copper outlets, a rocket pack behind the plate and a canopy that has seen too many police spotlights.</p><p>A fixer called <b>CIPHER</b> sends you jobs: getaways, data runs, bounties, sky gaps and ghost protocols. Every job raises your rep, opens new districts and buys upgrades. The Halcyon Bay Police answer with cruisers, interceptors, SWAT, a helicopter and EMP drones.</p><p>Outrun them. Out-fly them. Disappear.</p>`],
       ['CONTROLS', this.controlsHtml(false)],
       ['MODES', `<div class="info-modes"><div><b>FREE ROAM</b>Open city: jobs and street races at markers, pursuits, stunts, Air Stations, charging and repair.</div><div class="soon"><b>RACE</b>Five circuits with rival AI, laps, checkpoints and records.</div><div class="soon"><b>HEIST</b>Rob a bank, jewelry store or armored truck, then escape to a safehouse.</div><div class="soon"><b>CAREER</b>100+ tasks with levels: deliveries, drifts, jumps, takedowns and more.</div><div class="soon"><b>KIDS</b>Daylight, no police, no damage: collect stars, pop balloons, find hidden animals.</div></div><p class="panel-note">Race, Heist, Career and Kids arrive in the next update.</p>`],
-      ['CREDITS', `<p><b>RDSTR // COLD GAS PURSUIT</b></p><p>Game design, code, 3D models, procedural city, synthesized audio and music: built from scratch in the browser.</p><p>Built with <b>Three.js</b> (rendering), <b>Rapier</b> (physics) and <b>postprocessing</b> (bloom, tone mapping, SMAA).</p><p>In-city landmark: <b>GRAFIGATOR Design Studio</b>.</p><p class="panel-note">All brands in Halcyon Bay are fictional.</p>`],
+      ['CREDITS', `<p><b>RDSTR // COLD GAS PURSUIT</b></p><p>Game design, code, 3D models, procedural city, synthesized audio and music: built from scratch in the browser.</p><p>Built with <b>Three.js</b> (rendering), <b>Rapier</b> (physics) and <b>postprocessing</b> (bloom, tone mapping, SMAA).</p><p class="panel-note">All brands in Halcyon Bay are fictional.</p>`],
     ];
     const items = tabs.map(([name, html], i) => ({
       label: name, cls: 'tab',

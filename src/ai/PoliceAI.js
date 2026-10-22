@@ -240,7 +240,14 @@ export class PoliceSystem {
         const chasing = this.chaseUnits.length;
         const want = Math.min(cfg.units, MAX_CHASE_UNITS) - (searching ? 1 : 0);
         if (chasing < want && active.length < MAX_TOTAL) {
-          const s = searching
+          // Heat 3+: every other unit visibly rolls out of the Police Station when it is near.
+          const st = this.game.world.gen.policeStation;
+          this.stationToggle = !this.stationToggle;
+          const fromStation = st && heat.level >= 3 && this.stationToggle && Math.hypot(st.x - player.position.x, st.z - player.position.z) < 900;
+          const ex = fromStation ? st.exits[Math.floor(Math.random() * st.exits.length)] : null;
+          const s = ex
+            ? { pos: new THREE.Vector3(ex.x, 1.0, ex.z), yaw: ex.yaw }
+            : searching
             ? this.findSpawn(40, 220, { center: heat.lastKnown || player.position })
             : this.quickSpawn > 0
               ? this.findSpawn(80, 170, { ahead: Math.random() < 0.5 })

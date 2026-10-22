@@ -105,6 +105,34 @@ export class SFX {
     o.dispose(at + 5);
   }
 
+  // Service stations: charging hum sweep, workshop tools, done chime.
+  charging(pos) {
+    const e = this.e;
+    if (!e.ok || !this.gate('charging', 0.9)) return;
+    const o = e.oneShotOut(pos, { ref: 12 });
+    this.tone(o.input, { type: 'sawtooth', f0: 110, f1: 180, peak: 0.06, attack: 0.2, decay: 0.8 });
+    this.tone(o.input, { type: 'sine', f0: 880, f1: 1320, peak: 0.05, attack: 0.1, decay: 0.7 });
+    o.dispose(1.2);
+  }
+
+  tools(pos) {
+    const e = this.e;
+    if (!e.ok || !this.gate('tools', 0.35)) return;
+    const o = e.oneShotOut(pos, { ref: 12, reverb: 0.4 });
+    for (let i = 0; i < 4; i++) this.noiseBurst(o.input, { type: 'bandpass', f0: 2500 + Math.random() * 2500, q: 6, peak: 0.25, decay: 0.04, at: i * 0.07 });
+    if (Math.random() < 0.4) this.tone(o.input, { type: 'square', f0: 220, f1: 180, peak: 0.05, decay: 0.25 });
+    o.dispose(0.8);
+  }
+
+  serviceDone() {
+    const e = this.e;
+    if (!e.ok) return;
+    const o = e.oneShotOut(null, {});
+    this.tone(o.input, { f0: 660, peak: 0.12, decay: 0.25 });
+    this.tone(o.input, { f0: 990, peak: 0.12, decay: 0.4, at: 0.12 });
+    o.dispose(1);
+  }
+
   land(heaviness, pos) {
     const e = this.e;
     if (!e.ok || !this.gate('land', 0.1)) return;

@@ -36,6 +36,8 @@ import { StyleScore } from '../game/Score.js';
 import { ActivityManager } from '../game/Activities.js';
 import { Menu } from '../ui/Menu.js';
 import { XRay } from '../fx/XRay.js';
+import { Services } from '../game/Services.js';
+import { Pedestrians } from '../world/Pedestrians.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -134,6 +136,8 @@ export class Game {
     };
     this.setupPursuitEvents();
     this.audio = new AudioSystem(this);
+    this.services = new Services(this);
+    this.peds = new Pedestrians(this);
     this.world.env.onLightning = (k) => {
       this.gfx.setFlash(0.28 * k, 0xdfe6ff);
       this.audio.sfx.thunder(k);
@@ -457,6 +461,8 @@ export class Game {
     this.stunts.update(dt, realDt, this.player, this.input);
     this.updateWater(realDt);
     this.updateAirStations();
+    this.services.update(realDt);
+    this.peds.update(dt, realDt);
     this.pursuitActive = this.heat.phase !== 'none';
     if (this.player.hp <= 0 && !this.player.wrecked) this.onPlayerWrecked();
     this.takedownCam.cooldown = Math.max(0, this.takedownCam.cooldown - realDt);
@@ -690,6 +696,7 @@ export class Game {
   // ---- game flow: title -> (intro flyover) -> play; pause -> quit to title -----------------
   startPlay({ continueStory = false, activity = null, district = null, tod = null, weather = null } = {}) {
     const m = this.menu;
+    this.services.cancel();
     if (tod || weather) this.setConditions(tod || this.settings.get('tod'), weather || this.settings.get('weather'));
     m.close();
     m.leaveShowroom();
@@ -697,7 +704,7 @@ export class Game {
     this.police.clearAll();
     this.heat.clear('reset');
     this.restorePlayer();
-    let spot = { x: 3.8, z: 70, yaw: 0 };
+    let spot = { x: 2.6, z: 70, yaw: 0 };
     if (district) {
       const d = this.world.districtStart(district);
       spot = { x: d.position.x, y: d.position.y, z: d.position.z, yaw: d.yaw };

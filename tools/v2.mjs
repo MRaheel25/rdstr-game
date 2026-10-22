@@ -65,4 +65,66 @@ export default {
     await sleep(3500);
     await shot('noon');
   },
+  // M3: city overhaul tour (spawn + Grafigator, shopping, residential, park, police, services).
+  async m3({ page, sleep, shot, log }) {
+    await page.evaluate(() => __game.startPlay({ district: 'downtown', tod: 'noon', weather: 'clear' }));
+    await sleep(1500);
+    await page.keyboard.press('Enter');
+    await sleep(6000);
+    await page.keyboard.press('h');
+    await shot('spawn');
+    const g = (expr) => page.evaluate(expr);
+    log(await g(() => JSON.stringify({ pois: (__game.world.gen.pois || []).map((p) => p.kind), services: (__game.world.gen.services || []).length, peds: __game.peds.count, alive: __game.peds.peds.filter((p) => p.alive).length, missing: __game.world.selfCheck() })));
+    const spots = [['grafigator', -14, 66, -Math.PI / 2 - 0.35], ['shopping', -60, 136, 1.2], ['residential', 300, -236, 1.0], ['park', -300, -240, 1.4], ['police', -170, 6, 0.3]];
+    for (const [n, x, z, yaw] of spots) {
+      await page.evaluate(([x, z, yaw]) => __game.activities.teleport({ x, y: 0, z }, yaw), [x, z, yaw]);
+      await sleep(2500);
+      await shot(n);
+    }
+    // Charging: drop the battery, park in a bay.
+    const r = await g(async () => {
+      const s = __game.world.gen.services.find((v) => v.type === 'charge');
+      __game.progress.data.cash = 5000;
+      __game.activities.teleport({ x: s.x, y: 0, z: s.z }, s.yaw);
+      __game.player.energy.battery = 40;
+      await new Promise((res) => setTimeout(res, 7000));
+      return { battery: __game.player.energy.battery, cash: __game.progress.cash };
+    });
+    log('charge', JSON.stringify(r));
+    await shot('charged');
+    const r2 = await g(async () => {
+      const s = __game.world.gen.services.find((v) => v.type === 'repair');
+      __game.player.hp = __game.player.maxHp * 0.4;
+      __game.activities.teleport({ x: s.x, y: 0, z: s.z }, s.yaw);
+      await new Promise((res) => setTimeout(res, 2500));
+      return { hp: __game.player.hp };
+    });
+    await shot('repairing');
+    await sleep(3500);
+    log('repair', JSON.stringify(r2), await g(() => __game.player.hp / __game.player.maxHp));
+  },
+  // M3 services: charge and repair (timers forced: headless frames are slow).
+  async m3s({ page, sleep, shot, log }) {
+    await page.evaluate(() => __game.startPlay({ district: 'downtown', tod: 'golden' }));
+    await sleep(1500);
+    await page.keyboard.press('Enter');
+    await sleep(2000);
+    for (const type of ['charge', 'repair']) {
+      await page.evaluate((type) => {
+        const s = __game.world.gen.services.find((v) => v.type === type);
+        __game.progress.data.cash = 5000;
+        __game.player.energy.battery = 40;
+        __game.player.hp = __game.player.maxHp * 0.4;
+        __game.activities.teleport({ x: s.x, y: 0, z: s.z }, s.yaw);
+        __game.services.cooldown = 0;
+        __game.services.stopped = 5;
+      }, type);
+      await sleep(2500);
+      log(type, await page.evaluate(() => JSON.stringify({ active: !!__game.services.active })));
+      await shot(type);
+      await page.evaluate(() => { const a = __game.services.active; if (a) a.t = a.dur - 0.01; });
+      await page.waitForFunction(() => !__game.services.active, null, { timeout: 60000 });
+      log(type, await page.evaluate(() => JSON.stringify({ battery: Math.round(__game.player.energy.battery), hp: Math.round(__game.player.hp / __game.player.maxHp * 100), cash: __game.progress.cash })));
+    }
+  },
 };

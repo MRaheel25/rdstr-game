@@ -47,11 +47,45 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 ## Version 2 (UPDATE_V2.md) — branch `v2-part1`
 - [x] **V2 M1 — Title screen and main menu** (see "V2 M1 results")
 - [x] **V2 M2 — Daylight, weather and lighting quality** (see "V2 M2 results")
-- [ ] V2 M3 — City overhaul (roads, districts, landmarks, people, Grafigator)
+- [x] **V2 M3 — City overhaul (roads, districts, landmarks, people, Grafigator)** (see "V2 M3 results")
 - [ ] V2 M4 — HUD, thruster control, physics and feedback
 - Part 2 (M5-M8) not started.
 - V2 smoke test: `SCEN=./v2.mjs EXTRA='&menu=1' node tools/smoke.mjs m<N> screenshots/v2m<N>` (scenarios `m1`..`m4` in `tools/v2.mjs`).
-- **Next:** V2 M3 (city overhaul).
+- **Next:** V2 M4 (HUD, thruster control, physics and feedback).
+
+## V2 M3 results
+- Roads: grid streets 20 m (4 lanes, 4.7 m lanes), the two central boulevards (x = 0, z = 0) 28 m with 6 lanes; the
+  Highway Ring keeps 6 lanes. `CityGenerator.buildGrid(xs, zs, lotFn, widthFn)` takes per-street widths; graph edges
+  carry `lanes` / `laneWidth`, so traffic lanes (`Traffic.laneOffsets`) and resets (`World.nearestRoad`) follow.
+  Dense blocks and the Shopping District have planters and bollards along the curb (gaps at crosswalks / lamps).
+  Minimap: roads drawn at their real width with a light edge, parks in green, icons for key locations.
+- Buildings: `BUILDING_STYLES` (glass tower, office, hotel, brick, industrial) combine a podium base with canopy,
+  facade style + palette, vertical fins and a crown (flat, stepped, spire with beacon, water tank).
+- `districts/Neighborhoods.js`: Shopping District (lots i 0-3, j 5-7): rows of shops from `SHOP_TYPES` (cafe,
+  restaurant, fast food, clothing, electronics, pharmacy, supermarket, car dealer, gym, cinema, bookstore, bakery), each
+  with facade colour, awning, sign and painted window display from one canvas atlas (one draw call), plus planters,
+  bikes, bike racks, kiosks and roof AC units. Residential Hills (i 5-7, j 0-2): houses with gable roofs, lawns,
+  fences, trees, driveways, parked cars and mailboxes. City Park (i 0-1, j 1-2): grass, cross paths, a lake with a stone
+  rim, a fountain, benches, lamps and ~45 trees per lot. `Layout.placeName(x, z)` names the neighbourhood.
+- `districts/Landmarks.js` (all marked on the minimap): Police Station (lot 2_3) with a parking lot of cruisers; at
+  heat 3+ every other reinforcement drives out of its exits when it is within 900 m. Charging Stations (canopy with 4
+  bays at lots 5_5 and 1_4, plus bays in both parking lots), Repair Shops (2 drive-in bays with roller doors, lots 6_4
+  and 2_6), Garage / Tuning Shop (3 bays, lot 4_2).
+- `game/Services.js`: stop in a bay for 0.7 s. Charging: light ring around the car, cable sparks, hum, battery fills,
+  $3 per %. Repair: roller door closes, sparks and tool sounds, HP and COPV restored, popped tyres fixed, dents
+  removed ($4 per HP, min $150). Tuning: opens the Garage menu. Verified headless: 40% -> 100% battery (-$180),
+  40% -> 100% HP (-$240).
+- `world/Pedestrians.js`: 40/90/150/220 people by quality in one InstancedMesh; walk cycle, bob, dive and fall done in
+  the vertex shader; varied shirt / trouser / skin / hair colours. They walk the sidewalk loops of the blocks around
+  the player, cross at crosswalks, stand at shop windows and bus stops. A car on a collision course makes them dive
+  aside; if touched they stumble, fall and get back up (no injuries). `game.kidsMode` = earlier, wider dodges and
+  no knock-downs.
+- GRAFIGATOR (in the world only): Design Studio on lot 4_4 beside the default spawn, facing the west boulevard:
+  dark glass curtain wall, cantilevered white top floor, glass storefront with a lit studio interior (desks, monitors,
+  design posters), small logo on the glass door, extruded mark + bold wordmark sign on the fascia, rooftop sign, lime
+  / teal trim lines. Three rooftop billboards along the boulevards carry it as a normal neon brand (`GRAFIGATOR_BRAND`,
+  never picked at random). Removed from the showroom, menus and credits by request (UPDATE_V2.md updated).
+- New props: planter, bollard, bike, bike rack, kiosk, AC unit, mailbox, charger, police car.
 
 ## V2 M2 results
 - `world/Environment.js`: lighting is now time of day x weather. `TODS` (Morning, Noon, Golden Hour, Sunset, Night) give
@@ -80,7 +114,7 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
   hover sounds, scanlines. Logo: heavy italic RDSTR with glitch layers + animated light sweep.
 - Showroom (`ui/GarageScene.js`): planar-reflection floor (vendored `Reflector`) under a glossy tiled coat, key spot with
   shadows, 3 sweeping light bars, cyan/magenta rim lights, back light, additive haze beams, fog, light pillars, slow camera
-  drift; subtle GRAFIGATOR wall sign.
+  drift. (No Grafigator branding in the menus: see the M3 note on branding.)
 - Live car viewer: drag (mouse / touch) to orbit, wheel / pinch to zoom (5.4-12 m, never inside the car), idle turntable.
   Hotspots projected on the car: doors, roof (canopy lifts on a rear hinge), lights on/off, thrusters (plate flips, vents
   open and glow). Paint changes blend smoothly (`RoadsterModel.setPaint(key, true)`).

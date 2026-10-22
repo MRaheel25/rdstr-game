@@ -25,6 +25,7 @@ export function propMaterial(key) {
     case 'tire': m = new THREE.MeshStandardMaterial({ color: 0x111214, roughness: 0.85 }); break;
     case 'airGlow': m = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x40e8ff).multiplyScalar(2.2) }); break;
     case 'emissiveAd': m = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xbfe6ff).multiplyScalar(2.2) }); break;
+    case 'lightBlue': m = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x2050ff).multiplyScalar(4) }); break;
     case 'emissiveRed': m = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff2020).multiplyScalar(4) }); break;
     case 'stripe': m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, map: stripeTex() }); break;
     default: m = new THREE.MeshStandardMaterial({ color: 0xff00ff });
@@ -200,6 +201,63 @@ export function buildPropTypes() {
       { mat: 'airGlow', geo: merge([new THREE.TorusGeometry(1.45, 0.07, 6, 32).rotateX(Math.PI / 2).translate(0, 0.24, 0), new THREE.TorusGeometry(0.9, 0.05, 6, 24).rotateX(Math.PI / 2).translate(0, 0.24, 0), box(0.5, 0.3, 0.42, 1.7, 2.3, 0)]) },
     ],
     collider: null, breakSpeed: 999, solid: false, mass: 0, radius: 1.8, decor: true,
+  };
+  // V2 street detail.
+  T.planter = {
+    parts: [
+      { mat: 'concrete', geo: box(2.4, 0.6, 1.0, 0, 0.3, 0) },
+      { mat: 'foliage', geo: merge([new THREE.IcosahedronGeometry(0.55, 0).translate(-0.6, 0.85, 0), new THREE.IcosahedronGeometry(0.6, 0).translate(0.2, 0.9, 0.05), new THREE.IcosahedronGeometry(0.5, 0).translate(0.85, 0.8, -0.05)]) },
+    ],
+    // Heavy: lines the curb in dense areas so the car stays on the road.
+    collider: { type: 'box', hx: 1.2, hy: 0.45, hz: 0.5 }, breakSpeed: 999, solid: true, mass: 900, radius: 1.2,
+  };
+  T.bollard = {
+    parts: [{ mat: 'metalDark', geo: merge([cyl(0.12, 0.14, 0.95, 0, 0.475, 0, 10), cyl(0.15, 0.15, 0.08, 0, 0.7, 0, 10)]) }],
+    collider: { type: 'cyl', r: 0.14, h: 0.95 }, breakSpeed: 999, solid: true, mass: 400, radius: 0.2,
+  };
+  T.bike = {
+    parts: [
+      { mat: 'tire', geo: merge([new THREE.TorusGeometry(0.33, 0.035, 6, 16).translate(-0.52, 0.36, 0), new THREE.TorusGeometry(0.33, 0.035, 6, 16).translate(0.52, 0.36, 0)]).rotateY(Math.PI / 2) },
+      { mat: 'paint', geo: merge([box(0.04, 0.04, 1.0, 0, 0.62, 0, 0, 0.5), box(0.04, 0.5, 0.04, 0, 0.6, -0.25), box(0.04, 0.04, 0.5, 0, 0.82, 0.25), box(0.4, 0.04, 0.04, 0, 0.95, 0.5), box(0.12, 0.05, 0.22, 0, 0.86, -0.28)]), color: 0x2a8ae0 },
+    ],
+    collider: { type: 'box', hx: 0.15, hy: 0.5, hz: 0.85 }, breakSpeed: 0.8, solid: false, mass: 14, radius: 0.85,
+  };
+  T.bikeRack = {
+    parts: [{ mat: 'metalLight', geo: merge([...[0, 1, 2, 3].map((i) => new THREE.TorusGeometry(0.4, 0.03, 5, 12, Math.PI).translate(-1.2 + i * 0.8, 0.02, 0))]) }],
+    collider: { type: 'box', hx: 1.5, hy: 0.4, hz: 0.1 }, breakSpeed: 3, solid: true, mass: 80, radius: 1.5,
+  };
+  T.kiosk = {
+    parts: [
+      { mat: 'metalDark', geo: merge([box(1.6, 2.2, 1.4, 0, 1.1, 0), box(2.0, 0.12, 1.8, 0, 2.6, 0)]) },
+      { mat: 'emissiveAd', geo: merge([box(1.3, 0.8, 0.05, 0, 1.5, 0.72), box(1.3, 0.35, 0.05, 0, 2.38, 0.72)]) },
+    ],
+    collider: { type: 'box', hx: 0.85, hy: 1.3, hz: 0.75 }, breakSpeed: 10, solid: true, mass: 350, radius: 1.1,
+  };
+  T.acUnit = {
+    parts: [{ mat: 'metalLight', geo: merge([box(1.0, 0.7, 0.6, 0, 0.35, 0), cyl(0.25, 0.25, 0.05, 0, 0.4, 0.31, 12, Math.PI / 2)]) }],
+    collider: null, breakSpeed: 999, solid: false, mass: 0, radius: 0.6, decor: true,
+  };
+  T.mailbox = {
+    parts: [{ mat: 'plastic', geo: merge([box(0.5, 0.9, 0.45, 0, 0.75, 0), box(0.1, 0.35, 0.1, 0, 0.17, 0)]), color: 0xc8a020 }],
+    collider: { type: 'box', hx: 0.26, hy: 0.6, hz: 0.24 }, breakSpeed: 1.5, solid: false, mass: 30, radius: 0.35,
+  };
+  T.charger = {
+    parts: [
+      { mat: 'metalLight', geo: merge([box(0.6, 1.8, 0.45, 0, 0.9, 0), box(0.8, 0.12, 0.6, 0, 1.86, 0)]) },
+      { mat: 'airGlow', geo: merge([box(0.42, 0.5, 0.05, 0, 1.3, 0.24), box(0.08, 1.4, 0.05, -0.26, 0.8, 0.24), box(0.08, 1.4, 0.05, 0.26, 0.8, 0.24)]) },
+    ],
+    collider: { type: 'box', hx: 0.32, hy: 0.95, hz: 0.25 }, breakSpeed: 999, solid: true, mass: 500, radius: 0.5,
+  };
+  T.policeCar = {
+    parts: [
+      { mat: 'paint', geo: sedanBody(), color: 0xf2f2f2 },
+      { mat: 'darkGlass', geo: sedanGlass() },
+      { mat: 'tire', geo: sedanWheels() },
+      { mat: 'metalDark', geo: merge([box(1.84, 0.06, 1.9, 0, 0.9, -1.4), box(1.84, 0.06, 1.0, 0, 0.9, 1.95)]) },
+      { mat: 'emissiveRed', geo: box(0.55, 0.14, 0.3, -0.32, 1.52, 0.05) },
+      { mat: 'lightBlue', geo: box(0.55, 0.14, 0.3, 0.32, 1.52, 0.05) },
+    ],
+    collider: { type: 'box', hx: 0.92, hy: 0.7, hz: 2.3, y: 0.75 }, breakSpeed: 999, solid: true, mass: 1400, radius: 2.4, car: true,
   };
   for (const k in T) T[k].name = k;
   return T;

@@ -6,7 +6,6 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { clamp, damp } from '../util/math.js';
-import { makeSign } from '../world/Grafigator.js';
 
 const MIN_DIST = 5.4; // never inside the car (half length ~2.3 m + margin)
 const MAX_DIST = 12;
@@ -115,12 +114,6 @@ export class GarageScene {
       s.add(m);
       this.beams.push(m);
     }
-    // GRAFIGATOR wall sign (subtle, behind the car on the title camera).
-    const sign = makeSign({ height: 0.62, glow: 0.55 });
-    sign.position.set(9.8, 3.6, -9.2);
-    sign.lookAt(-6, 3.0, 6);
-    s.add(sign);
-    this.sign = sign;
     // Environment for reflections: the studio light boxes baked into a PMREM.
     const envScene = new THREE.Scene();
     envScene.background = new THREE.Color(0x030407);

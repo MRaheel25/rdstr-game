@@ -2,35 +2,60 @@
 // signals, a plaza, a park, surface parking, a multi-storey parking garage (hiding spot,
 // rooftop jump) and the elevated train line.
 import * as THREE from 'three';
-import { GRID_XS, GRID_ZS, TRAIN_Z } from '../Layout.js';
-import { ROAD_W, SIDEWALK_W, CURB_H } from '../CityGenerator.js';
+import { GRID_XS, GRID_ZS, TRAIN_Z, AREAS, inArea } from '../Layout.js';
+import { ROAD_W, BOULEVARD_W, SIDEWALK_W, CURB_H } from '../CityGenerator.js';
+import { shoppingLot, residentialLot, cityParkLot, finishNeighborhoods } from './Neighborhoods.js';
+import { policeStation, chargingStation, chargingBays, repairShop, tuningShop, grafigatorStudio } from './Landmarks.js';
 
 const SPECIAL = {
   '3_4': 'plaza',
   '5_2': 'garage',
-  '1_5': 'park',
   '6_6': 'parking',
   '2_1': 'parking',
   '0_3': 'park',
+  // V2 key locations.
+  '4_4': 'grafigator', // beside the default spawn on the west boulevard
+  '2_3': 'police',
+  '5_5': 'charge',
+  '1_4': 'charge',
+  '6_4': 'repair',
+  '2_6': 'repair',
+  '4_2': 'tuning',
 };
+
 
 export function buildDowntown(gen) {
   const rng = gen.rng;
+  // Boulevards (6 lanes) on the two main axes through the centre; 4-lane streets elsewhere.
+  const widthFn = (axis, k) => ((axis === 'ns' ? GRID_XS[k] : GRID_ZS[k]) === 0 ? BOULEVARD_W : ROAD_W);
   gen.buildGrid(GRID_XS, GRID_ZS, (cx, cz, i, j) => {
     const sp = SPECIAL[`${i}_${j}`];
     if (sp) return { kind: sp, i, j };
+    const area = AREAS.find((a) => inArea(a, i, j));
+    if (area) return { kind: area.id, i, j };
     const d = Math.max(Math.abs(cx), Math.abs(cz));
     if (d < 200) return { kind: 'downtown', height: [45, 110], tallChance: 0.4, neon: 0.85, lit: rng.float(0.3, 0.6) };
     if (d < 330) return { kind: 'downtown', height: [26, 70], tallChance: 0.15, neon: 0.7 };
     return { kind: 'downtown', height: [14, 38], tallChance: 0.05, neon: 0.5, style: rng.chance(0.6) ? 3 : undefined };
-  });
+  }, widthFn);
   for (const lot of gen.lots) {
     furnishLot(gen, lot);
     if (lot.info.kind === 'plaza') plaza(gen, lot);
     if (lot.info.kind === 'park') park(gen, lot);
     if (lot.info.kind === 'parking') parkingLot(gen, lot);
     if (lot.info.kind === 'garage') garage(gen, lot);
+    const k = lot.info.kind;
+    if (k === 'shopping') shoppingLot(gen, lot);
+    if (k === 'residential') residentialLot(gen, lot);
+    if (k === 'citypark') cityParkLot(gen, lot, { lake: lot.info.i === 0 && lot.info.j === 1, fountain: lot.info.i === 1 && lot.info.j === 2 });
+    if (k === 'police') policeStation(gen, lot);
+    if (k === 'charge') chargingStation(gen, lot, lot.info.i === 1 ? 'e' : 's');
+    if (k === 'repair') repairShop(gen, lot, lot.info.i === 6 ? 'w' : 'n');
+    if (k === 'tuning') tuningShop(gen, lot, 'w');
+    if (k === 'grafigator') grafigatorStudio(gen, lot);
+    if (k === 'parking') chargingBays(gen, (lot.x0 + lot.x1) / 2 + 30, lot.z1 - 12, 0, 3);
   }
+  finishNeighborhoods(gen);
   signals(gen);
   elevatedTrain(gen);
   // Steam vents on manholes in the roads.
@@ -90,6 +115,20 @@ function furnishLot(gen, lot) {
       const [x, z] = pos(t, type === 'bench' ? 2.2 : 0.4);
       P.add(type, x, y, z, s.rot + (type === 'bench' ? Math.PI : 0));
     }
+    // Dense blocks: planters and bollards line the curb (gaps at crosswalks and lamps) so the
+    // car stays on the road without a wall.
+    const dense = info.kind === 'downtown' && Math.max(Math.abs((x0 + x1) / 2), Math.abs((z0 + z1) / 2)) < 330;
+    if (dense || info.kind === 'shopping') {
+      for (let t = 16; t < len - 14; t += 15) {
+        if ((t - 10 - (si % 2) * 14) % 32 < 3) continue;
+        const [x, z] = pos(t, -0.2);
+        if (rng.chance(0.6)) P.add('planter', x, y, z, s.rot);
+        else for (const o of [-1.2, 0, 1.2]) {
+          const [bx, bz] = pos(t + o, -0.3);
+          P.add('bollard', bx, y, bz, 0);
+        }
+      }
+    }
     // Bus stop on some sides.
     if (rng.chance(0.18) && info.kind === 'downtown') {
       const [x, z] = pos(len / 2, 2.0);
@@ -103,17 +142,19 @@ function furnishLot(gen, lot) {
 
 // Traffic signals: one per lot corner, controlling alternate axes.
 function signals(gen) {
-  const hw = ROAD_W / 2;
+  const { wx, wz } = gen.gridW;
   for (let i = 0; i < GRID_XS.length; i++) {
     for (let j = 0; j < GRID_ZS.length; j++) {
       const x = GRID_XS[i];
       const z = GRID_ZS[j];
+      const hx = wx[i] / 2;
+      const hz = wz[j] / 2;
       const id = i * 31 + j * 17;
       const corners = [
-        [x + hw + 1.2, z + hw + 1.2, Math.PI, 'ns'], // SE corner, arm over the NS street (pointing -x... arm along -z)
-        [x - hw - 1.2, z - hw - 1.2, 0, 'ns'],
-        [x - hw - 1.2, z + hw + 1.2, Math.PI / 2, 'ew'],
-        [x + hw + 1.2, z - hw - 1.2, -Math.PI / 2, 'ew'],
+        [x + hx + 1.2, z + hz + 1.2, Math.PI, 'ns'], // SE corner, arm over the NS street (pointing -x... arm along -z)
+        [x - hx - 1.2, z - hz - 1.2, 0, 'ns'],
+        [x - hx - 1.2, z + hz + 1.2, Math.PI / 2, 'ew'],
+        [x + hx + 1.2, z - hz - 1.2, -Math.PI / 2, 'ew'],
       ];
       for (const [cx, cz, rot, axis] of corners) {
         // Skip corners that face open ground at the grid boundary.

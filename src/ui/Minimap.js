@@ -4,6 +4,13 @@
 import { LAND } from '../world/Layout.js';
 
 const PX = 0.5; // pixels per metre in the pre-rendered layer
+const POI_STYLE = {
+  police: { icon: 'P', bg: '#2a5cff', fg: '#fff' },
+  charge: { icon: '⚡', bg: '#0c3a48', fg: '#40e8ff' },
+  repair: { icon: 'R', bg: '#e07020', fg: '#fff' },
+  tuning: { icon: 'T', bg: '#7a2ae0', fg: '#fff' },
+  grafigator: { icon: 'G', bg: '#15171a', fg: '#e7f75b' },
+};
 
 export class Minimap {
   constructor(world) {
@@ -60,9 +67,25 @@ export class Minimap {
         x.stroke();
       }
     };
-    draw((e) => e.kind !== 'highway' && e.kind !== 'ramp' && e.kind !== 'stunt', '#3a4a60', 16);
-    draw((e) => e.kind === 'ramp' || e.kind === 'stunt', '#56647a', 9);
-    draw((e) => e.kind === 'highway', '#6f8098', 24);
+    // V2: roads stand out clearly (light edge + fill at their real width).
+    const street = (e) => e.kind !== 'highway' && e.kind !== 'ramp' && e.kind !== 'stunt';
+    const w = (e) => (e.laneWidth && e.lanes > 1 ? (e.laneWidth * e.lanes + 0.6) * 2 : 16);
+    for (const [col, pad] of [['#8fa6c4', 4], ['#4a5d78', 0]]) {
+      x.strokeStyle = col;
+      for (const e of this.world.graph.edges) {
+        if (!street(e)) continue;
+        x.lineWidth = (w(e) + pad) * PX;
+        x.beginPath();
+        e.points.forEach((p, i) => (i ? x.lineTo(X(p.x), Z(p.z)) : x.moveTo(X(p.x), Z(p.z))));
+        x.stroke();
+      }
+    }
+    draw((e) => e.kind === 'ramp' || e.kind === 'stunt', '#6a7a92', 10);
+    draw((e) => e.kind === 'highway', '#b8c8dc', 28);
+    draw((e) => e.kind === 'highway', '#7f92ac', 24);
+    // Parks.
+    x.fillStyle = 'rgba(60,130,70,0.45)';
+    for (const p of this.world.gen.parks || []) x.fillRect(X(p.x - p.w / 2), Z(p.z - p.d / 2), p.w * PX, p.d * PX);
     this.layer = c;
   }
 
@@ -142,6 +165,27 @@ export class Minimap {
       ctx.beginPath();
       ctx.arc(p.x, p.z, 6 / z, 0, Math.PI * 2);
       ctx.stroke();
+    }
+    // Key locations: police station, charging, repair, tuning, landmark.
+    ctx.font = `bold ${9 / z}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const p of this.world.gen.pois || []) {
+      const st = POI_STYLE[p.kind];
+      if (!st) continue;
+      ctx.save();
+      ctx.translate(p.x, p.z);
+      ctx.rotate(-heading);
+      ctx.fillStyle = st.bg;
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1.5 / z;
+      ctx.beginPath();
+      ctx.arc(0, 0, 7 / z, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = st.fg;
+      ctx.fillText(st.icon, 0, 0.5 / z);
+      ctx.restore();
     }
     // Police, helicopter, drones.
     const t = performance.now() * 0.006;

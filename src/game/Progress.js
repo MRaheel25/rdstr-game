@@ -184,6 +184,11 @@ export class Progress {
     return unlocked;
   }
 
+  spend(cost) {
+    this.data.cash = Math.max(0, this.data.cash - Math.round(cost));
+    this.save();
+  }
+
   districtOpen(id) {
     return this.data.districts.includes(id);
   }

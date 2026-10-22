@@ -198,7 +198,14 @@ export function updateMaterials(time) {
 export function setConditions(night, wet) {
   nightLevel = night;
   const r = roadMaterial();
-  r.roughness = wet > 0 ? 0.55 : 1;
+  // Puddles (low-roughness areas of the roughness map) only exist when it rains.
+  if (!r.userData.puddles) r.userData.puddles = r.roughnessMap;
+  const map = wet > 0 ? r.userData.puddles : null;
+  if (r.roughnessMap !== map) {
+    r.roughnessMap = map;
+    r.needsUpdate = true;
+  }
+  r.roughness = wet > 0 ? 0.55 : 0.92;
   r.color.set(wet > 0 ? 0x74747a : 0x9a9aa0);
   r.envMapIntensity = wet > 0 ? 1.3 : 0.7;
   const sw = sidewalkMaterial();

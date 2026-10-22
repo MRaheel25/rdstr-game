@@ -96,7 +96,7 @@ GRAFIGATOR LANDMARK (must look built-in, not like a watermark):
 - Use the brand colors lime yellow #e7f75b and light teal #54dc9d as accent lighting and trim on the building.
 - Ground floor: glass storefront with a studio interior visible through the windows (desks, screens, design posters), plus a smaller logo on the glass door.
 - Add the Grafigator logo on 2 or 3 billboards around the city as in-world advertising, styled like the other fictional brands.
-- Show it in the main menu showroom too, as a subtle sign on the showroom wall.
+- Grafigator appears ONLY inside the city, as a natural part of the world: the GRAFIGATOR Design Studio building and 2 or 3 small in-world billboards styled exactly like the other fictional brands. Do NOT put any Grafigator sign, logo or mention in the main menu, showroom, title screen, loading screen, menus or credits (it reads as forced promotion). This replaces the earlier "show it in the main menu showroom" request.
 
 ### MILESTONE 4: HUD, THRUSTER CONTROL, PHYSICS AND FEEDBACK
 

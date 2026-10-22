@@ -73,7 +73,7 @@ export class World {
     this.steam.build();
     this.train = gen.trainLine ? new Train(this.ctx, gen.trainLine) : null;
     this.buildLampLights();
-    this.spawn = { position: new THREE.Vector3(3.8, 0.7, 70), yaw: 0 };
+    this.spawn = { position: new THREE.Vector3(2.6, 0.7, 70), yaw: 0 };
     this.coverGroups = groups(0x8000, G.STATIC | G.RAMP);
     return this;
   }
@@ -222,7 +222,8 @@ export class World {
     const dir = r.dir.clone();
     if (preferDir && dir.dot(preferDir) < 0) dir.negate();
     const right = new THREE.Vector3(-dir.z, 0, dir.x);
-    const lane = r.edge.kind === 'highway' ? 7.5 : r.edge.lanes > 1 ? 3.8 : 2.6;
+    const e = r.edge;
+    const lane = e.kind === 'highway' ? 7.5 : e.lanes > 1 ? (e.laneWidth > 3.6 ? 0.35 + e.laneWidth * 0.5 : 3.8) : 2.6;
     const p = r.point.clone().addScaledVector(right, lane);
     p.y += 0.75;
     return { position: p, yaw: Math.atan2(-dir.x, -dir.z) };
