@@ -3,6 +3,13 @@
 import { clamp, MPS_TO_MPH, MPS_TO_KMH } from '../util/math.js';
 
 const $ = (sel) => document.querySelector(sel);
+const thrustText = (car) => {
+  const t = car.thrust;
+  if (t.rocket) return 'ROCKETS';
+  if (t.hover) return 'HOVER JETS';
+  if (t.air) return 'RCS';
+  return car.flightAssist ? 'ASSISTED FLIGHT' : 'PRO FLIGHT';
+};
 
 export class HUD {
   constructor(settings) {
@@ -33,6 +40,45 @@ export class HUD {
     this.lastWarnKey = '';
     this.visible = false;
     this.gaugeTimer = 0;
+    // V2 gauge tiles.
+    this.tiles = {};
+    for (const k of ['batt', 'hp', 'copv']) {
+      const el = $(`#cluster .gt.${k}`);
+      this.tiles[k] = { el, val: el.querySelector('.gt-head b'), bar: el.querySelector('.gt-bar i'), sub: el.querySelector('.gt-sub'), cls: '' };
+    }
+    this.tv = $('#thrust-view');
+    this.tg = this.tv.getContext('2d');
+    this.tv.width = 120 * dpr;
+    this.tv.height = 120 * dpr;
+    this.tg.scale(dpr, dpr);
+    this.tagEl = $('#player-tag');
+    this.applyLayout();
+  }
+
+  // Settings > HUD: show / hide elements and gauge position.
+  applyLayout() {
+    const h = this.settings.get('hud') || {};
+    const r = this.root;
+    for (const pos of ['bottom', 'side', 'top']) r.classList.toggle(`pos-${pos}`, (h.position || 'bottom') === pos);
+    for (const k of ['speed', 'battery', 'health', 'thrusters', 'minimap', 'score']) r.classList.toggle(`hide-${k}`, h[k] === false);
+  }
+
+  setPlayerName(name) {
+    this.tagEl.textContent = name ? `▸ ${String(name).toUpperCase()}` : '';
+  }
+
+  // One gauge tile: fraction, value text, sub line; green / yellow / red with a pulse when low.
+  tile(k, f, text, sub, mid = 0.5, low = 0.25) {
+    const t = this.tiles[k];
+    const cls = f <= low ? 'low' : f <= mid ? 'mid' : '';
+    if (cls !== t.cls) {
+      t.el.classList.toggle('low', cls === 'low');
+      t.el.classList.toggle('mid', cls === 'mid');
+      t.cls = cls;
+    }
+    t.bar.style.width = `${(clamp(f, 0, 1) * 100).toFixed(1)}%`;
+    if (t.text !== text) t.val.textContent = t.text = text;
+    if (t.subText !== sub) t.sub.textContent = t.subText = sub;
   }
 
   show(v) {
@@ -91,6 +137,82 @@ export class HUD {
       this.warnEl.innerHTML = [...this.warnings.values()].map((w) => `<div class="warn ${w.cls}">${w.text}</div>`).join('');
     }
     this.drawGauge(car, sp, units);
+    if (e) {
+      this.tile('batt', e.battery / 100, `${Math.round(e.battery)}%`, `${Math.round(e.temp)}°C${e.thermalLimit ? ' · HOT' : ''}`, 0.4, 0.15);
+      this.tile('copv', e.pressurePct / 100, `${Math.round(e.pressurePct)}%`, e.emp > 0 ? 'EMP OFFLINE' : thrustText(car), 0.4, 0.15);
+      this.tiles.copv.el.classList.toggle('firing', !!(car.thrust.rocket || car.thrust.hover || car.thrust.air));
+    }
+    const hpF = car.hp / car.maxHp;
+    this.tile('hp', hpF, `${Math.round(hpF * 100)}%`, hpF < 0.25 ? 'CRITICAL' : hpF < 0.5 ? 'DAMAGED' : 'OK', 0.5, 0.25);
+    this.drawThrusters(car);
+  }
+
+  // Top view of the car: which thrusters fire (rear rockets, 4 hover jets, side RCS for
+  // roll / yaw, nose / tail RCS for pitch) and the remaining COPV pressure as a ring.
+  drawThrusters(car) {
+    const g = this.tg;
+    g.clearRect(0, 0, 120, 120);
+    const e = car.energy;
+    const p = e ? clamp(e.pressurePct / 100, 0, 1) : 0;
+    g.lineWidth = 4;
+    g.strokeStyle = 'rgba(255,255,255,0.08)';
+    g.beginPath();
+    g.arc(60, 60, 54, 0, Math.PI * 2);
+    g.stroke();
+    g.strokeStyle = p < 0.15 ? '#ff3b4a' : p < 0.4 ? '#ffd23f' : '#bfe9ff';
+    g.beginPath();
+    g.arc(60, 60, 54, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
+    g.stroke();
+    // Car outline (nose up).
+    g.strokeStyle = 'rgba(238,244,255,0.75)';
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(60, 22);
+    g.lineTo(76, 34);
+    g.lineTo(78, 86);
+    g.lineTo(72, 96);
+    g.lineTo(48, 96);
+    g.lineTo(42, 86);
+    g.lineTo(44, 34);
+    g.closePath();
+    g.stroke();
+    const t = car.thrust;
+    const jet = (x, y, on, r = 4, col = '#40e8ff') => {
+      g.fillStyle = on ? col : 'rgba(255,255,255,0.14)';
+      g.shadowColor = col;
+      g.shadowBlur = on ? 10 : 0;
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+    };
+    const flame = (x, y, dx, dy, on, col = '#40e8ff') => {
+      if (!on) return;
+      g.strokeStyle = col;
+      g.lineWidth = 3;
+      g.shadowColor = col;
+      g.shadowBlur = 10;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + dx, y + dy);
+      g.stroke();
+    };
+    // Hover jets (corners).
+    for (const [x, y] of [[48, 40], [72, 40], [48, 84], [72, 84]]) jet(x, y, t.hover > 0);
+    // Rear rockets.
+    jet(54, 98, t.rocket > 0, 3.5, '#ffb02e');
+    jet(66, 98, t.rocket > 0, 3.5, '#ffb02e');
+    flame(54, 101, 0, 12, t.rocket > 0, '#ffb02e');
+    flame(66, 101, 0, 12, t.rocket > 0, '#ffb02e');
+    // RCS: roll (left / right sides), yaw (front corners), pitch (nose / tail).
+    flame(42, 60, -10, 0, t.roll > 0.05 || t.yaw < -0.05);
+    flame(78, 60, 10, 0, t.roll < -0.05 || t.yaw > 0.05);
+    flame(60, 22, 0, -10, t.pitch < -0.05);
+    flame(60, 90, 0, 8, t.pitch > 0.05);
+    g.shadowBlur = 0;
+    g.fillStyle = 'rgba(238,244,255,0.7)';
+    g.font = 'bold 9px monospace';
+    g.textAlign = 'center';
+    g.fillText('COPV', 60, 64);
   }
 
   updateHeat(heat) {

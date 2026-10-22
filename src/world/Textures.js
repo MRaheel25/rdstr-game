@@ -238,7 +238,11 @@ export const BRANDS = [
   { text: 'MOTEL 24', color: '#ff3f6e' },
   { text: 'GRID FUEL', color: '#ffd23f' },
   { text: 'CHROMA', color: '#3fd0ff' },
+  // Placed deliberately on 2-3 billboards only (see Decor.js), never picked at random.
+  { text: 'GRAFIGATOR', color: '#e7f75b' },
 ];
+export const RANDOM_BRANDS = BRANDS.length - 1;
+export const GRAFIGATOR_BRAND = BRANDS.length - 1;
 
 export function neonSign(index) {
   return cached('neon_' + index, () => {

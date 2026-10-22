@@ -44,7 +44,112 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 | `ui/ActivityUI.js` | Briefing cards, results screen, race HUD, countdown, objective line |
 | `ai/Heat.js`, `ai/PoliceAI.js`, `ai/Radio.js` | Heat 0-5, evade/cooldown loop, busted timer; police units, roadblocks, spikes, heli, drones; dispatch subtitles |
 
-## Milestones
+## Version 2 (UPDATE_V2.md) — branch `v2-part1`
+- [x] **V2 M1 — Title screen and main menu** (see "V2 M1 results")
+- [x] **V2 M2 — Daylight, weather and lighting quality** (see "V2 M2 results")
+- [x] **V2 M3 — City overhaul (roads, districts, landmarks, people, Grafigator)** (see "V2 M3 results")
+- [x] **V2 M4 — HUD, thruster control, physics and feedback** (see "V2 M4 results")
+- **Part 1 (M1-M4) complete.** Part 2 (M5-M8) not started.
+- V2 smoke test: `SCEN=./v2.mjs EXTRA='&menu=1' node tools/smoke.mjs m<N> screenshots/v2m<N>` (scenarios `m1`..`m4` in `tools/v2.mjs`).
+- **Next:** Part 2, starting with V2 M5 (Garage upgrades and paint). Kids Mode (M6) should set `game.kidsMode = true` (pedestrians already honour it).
+
+## V2 M4 results
+- HUD (`ui/HUD.js`, css "HUD (V2)"): cut-corner gauge tiles with icons for Battery (temperature sub-line), Chassis
+  and Thrusters (COPV pressure + which system is firing). Green -> yellow -> red with a pulsing glow when low. A
+  thruster view draws the car from above with the rear rockets, the four hover jets and the RCS nozzles lighting up as
+  they fire, inside a COPV pressure ring. The speed arc gauge stays. Player name tag above the minimap.
+- Settings > HUD now works: show / hide speedometer, battery, health, thrusters, minimap, score; gauge position bottom
+  (centre row), side (stack beside the speedometer) or top. `HUD.applyLayout()`.
+- Assisted Flight (default; Settings > Controls > Flight mode): `Game.flightAssist()` + Vehicle air stabilisation hold
+  the car level in the air (yaw untouched). Space = lift, Shift = boost, tap Q / E = full barrel roll, tap W / S = full
+  flip, then it levels out. Pro Flight keeps the manual controls with gentle stabilisation. Both straighten up harder
+  in the last 0.9 s before landing. Measured (test stepping): tilted 52° -> upright in 2 s with Assist (Pro 0.98 up,
+  none 0.62); barrel roll done in 2.1 s and flip in 2.4 s, both ending level.
+- Landing preview: ballistic path ray-cast every other frame while airborne; ring marker on the ground (green upright,
+  amber if the car would land badly), size grows with time to impact.
+- Physics: visual body pitch under braking / acceleration and body roll in corners on a spring-damper (wheels stay
+  planted); off-road rolling resistance on grass / dirt on top of the lower grip; asphalt grip x0.84 in the rain.
+- Damage on the model: clearcoat dulls and paint roughens with damage, hood smoke below 50% chassis (black below
+  25%), left headlight breaks and the right one flickers above 60% damage (plus the V1 dents, cracked glass and the
+  splitter falling off).
+
+## V2 M3 results
+- Roads: grid streets 20 m (4 lanes, 4.7 m lanes), the two central boulevards (x = 0, z = 0) 28 m with 6 lanes; the
+  Highway Ring keeps 6 lanes. `CityGenerator.buildGrid(xs, zs, lotFn, widthFn)` takes per-street widths; graph edges
+  carry `lanes` / `laneWidth`, so traffic lanes (`Traffic.laneOffsets`) and resets (`World.nearestRoad`) follow.
+  Dense blocks and the Shopping District have planters and bollards along the curb (gaps at crosswalks / lamps).
+  Minimap: roads drawn at their real width with a light edge, parks in green, icons for key locations.
+- Buildings: `BUILDING_STYLES` (glass tower, office, hotel, brick, industrial) combine a podium base with canopy,
+  facade style + palette, vertical fins and a crown (flat, stepped, spire with beacon, water tank).
+- `districts/Neighborhoods.js`: Shopping District (lots i 0-3, j 5-7): rows of shops from `SHOP_TYPES` (cafe,
+  restaurant, fast food, clothing, electronics, pharmacy, supermarket, car dealer, gym, cinema, bookstore, bakery), each
+  with facade colour, awning, sign and painted window display from one canvas atlas (one draw call), plus planters,
+  bikes, bike racks, kiosks and roof AC units. Residential Hills (i 5-7, j 0-2): houses with gable roofs, lawns,
+  fences, trees, driveways, parked cars and mailboxes. City Park (i 0-1, j 1-2): grass, cross paths, a lake with a stone
+  rim, a fountain, benches, lamps and ~45 trees per lot. `Layout.placeName(x, z)` names the neighbourhood.
+- `districts/Landmarks.js` (all marked on the minimap): Police Station (lot 2_3) with a parking lot of cruisers; at
+  heat 3+ every other reinforcement drives out of its exits when it is within 900 m. Charging Stations (canopy with 4
+  bays at lots 5_5 and 1_4, plus bays in both parking lots), Repair Shops (2 drive-in bays with roller doors, lots 6_4
+  and 2_6), Garage / Tuning Shop (3 bays, lot 4_2).
+- `game/Services.js`: stop in a bay for 0.7 s. Charging: light ring around the car, cable sparks, hum, battery fills,
+  $3 per %. Repair: roller door closes, sparks and tool sounds, HP and COPV restored, popped tyres fixed, dents
+  removed ($4 per HP, min $150). Tuning: opens the Garage menu. Verified headless: 40% -> 100% battery (-$180),
+  40% -> 100% HP (-$240).
+- `world/Pedestrians.js`: 40/90/150/220 people by quality in one InstancedMesh; walk cycle, bob, dive and fall done in
+  the vertex shader; varied shirt / trouser / skin / hair colours. They walk the sidewalk loops of the blocks around
+  the player, cross at crosswalks, stand at shop windows and bus stops. A car on a collision course makes them dive
+  aside; if touched they stumble, fall and get back up (no injuries). `game.kidsMode` = earlier, wider dodges and
+  no knock-downs.
+- GRAFIGATOR (in the world only): Design Studio on lot 4_4 beside the default spawn, facing the west boulevard:
+  dark glass curtain wall, cantilevered white top floor, glass storefront with a lit studio interior (desks, monitors,
+  design posters), small logo on the glass door, extruded mark + bold wordmark sign on the fascia, rooftop sign, lime
+  / teal trim lines. Three rooftop billboards along the boulevards carry it as a normal neon brand (`GRAFIGATOR_BRAND`,
+  never picked at random). Removed from the showroom, menus and credits by request (UPDATE_V2.md updated).
+- New props: planter, bollard, bike, bike rack, kiosk, AC unit, mailbox, charger, police car.
+
+## V2 M2 results
+- `world/Environment.js`: lighting is now time of day x weather. `TODS` (Morning, Noon, Golden Hour, Sunset, Night) give
+  sun elevation/azimuth, sun colour/intensity, sky, fog, hemisphere fill, exposure, lamp level and a `night` factor;
+  `WEATHERS` (Clear, Cloudy, Rain, Fog, Storm) scale cloud cover, fog density, direct light, sky greying, rain, wet roads
+  and lightning. `makePreset()` merges both into the flat preset the rest of the game reads (old fields kept: `moon`,
+  `moonI`, `rain`, `wet`, `lampScale`). V1 names `night`/`dusk`/`rain` still work through `apply()`.
+- Real sun: the directional key light follows the preset's angle and colour (moon at night); the sky shader draws a sun
+  disc with Mie halo, forward-scattering glow and sunlit day clouds (city-lit clouds and stars at night).
+- Shadows: tightly fitted frustum (±55/62/75 m by shadow map size) centred ahead of the camera; low suns are clamped
+  above the horizon so the street still gets long shadows.
+- Reflections: the PMREM env map is rebuilt per preset (sunlit facades and asphalt by day, neon and sodium at night);
+  `scene.environmentIntensity` per time of day. Car paint clearcoat sharper (roughness 0.025, env 1.4).
+- Building windows glow only at night (`uNight` uniform in the facade shader); street-lamp spots, light pools and
+  cones follow the lamp level, so daylight has none. Night is readable: exposure 1.3, brighter moon/fill, lamps x1.35.
+- Wet roads only when it rains (road/sidewalk roughness and colour change, wet light streaks; dry = none).
+- Storm: random double-flicker lightning lights the scene, short screen flash and synthesized thunder (`SFX.thunder`).
+- Play setup: Mode -> District (cards with a still rendered from the game by `Game.renderPreview`, locked districts show
+  their rep) -> Time of day -> Weather (sky swatch cards) -> drive. `Game.startPlay({district, tod, weather})`,
+  `World.districtStart(id)`. Noon / Clear is the default for new players. Settings > Graphics also has Time of day
+  and Weather (applied live). The intro card shows the chosen time and weather.
+
+## V2 M1 results
+- New visual identity (css/style.css "Menus (V2)"): graphite glass panels with cut corners, cyan->magenta signal line,
+  skewed button plates with index numbers, glow line that grows under the focused item, light-sweep shine on focus,
+  hover sounds, scanlines. Logo: heavy italic RDSTR with glitch layers + animated light sweep.
+- Showroom (`ui/GarageScene.js`): planar-reflection floor (vendored `Reflector`) under a glossy tiled coat, key spot with
+  shadows, 3 sweeping light bars, cyan/magenta rim lights, back light, additive haze beams, fog, light pillars, slow camera
+  drift. (No Grafigator branding in the menus: see the M3 note on branding.)
+- Live car viewer: drag (mouse / touch) to orbit, wheel / pinch to zoom (5.4-12 m, never inside the car), idle turntable.
+  Hotspots projected on the car: doors, roof (canopy lifts on a rear hinge), lights on/off, thrusters (plate flips, vents
+  open and glow). Paint changes blend smoothly (`RoadsterModel.setPaint(key, true)`).
+- Title buttons: CONTINUE (when a career exists), PLAY (mode cards; Free Roam only until Part 2), GARAGE, PLAYER NAME
+  (saved in the career, shown on the title and save slots), SETTINGS, GAME INFO (Story / Controls / Modes / Credits),
+  SAVE GAMES (3 slots: name, level, cash, playtime, date; load / overwrite / delete with confirmation; also in Pause),
+  EXIT (confirm -> "Thanks for playing" screen).
+- Settings by category: Sound (master/music/SFX), VFX (particle amount, motion blur, camera shake), Graphics (preset,
+  resolution scale, auto quality), Controls (flight assist, keyboard + gamepad rebinding), HUD (show/hide, gauge position;
+  wired up in M4), Career (units, reset).
+- `world/Grafigator.js`: logo parsed from `reference/grafigator-logo.svg` with SVGLoader and extruded; bold block-glyph
+  wordmark; `makeSign()` illuminated sign with lime/teal trim; `drawLogo2D()` for canvas billboards.
+- Progress: `playerName`, `playtime`, `lastPlayed`, `level` (from rep until Part 2 career XP), slot API.
+
+## Milestones (V1)
 - [x] **M1 — Setup, collision and vehicle physics on a test city block**
 - [x] M2 — Full city world, lighting, sky, atmosphere and post-processing
 - [x] M3 — Roadster and police models

@@ -113,10 +113,12 @@ export function makePaint(preset = PAINTS.pearlWhite) {
     metalness: preset.metalness,
     roughness: preset.roughness,
     clearcoat: preset.clearcoat,
-    clearcoatRoughness: 0.04,
+    // V2: glassier clearcoat so the sun and street lights leave sharp highlights.
+    clearcoatRoughness: 0.025,
+    specularIntensity: 1,
     normalMap: preset.flake > 0 ? flakeNormal() : null,
     normalScale: new THREE.Vector2(preset.flake * 0.15, preset.flake * 0.15),
-    envMapIntensity: 1.25,
+    envMapIntensity: 1.4,
     emissive: preset.glow ? new THREE.Color(preset.glow) : new THREE.Color(0),
     emissiveIntensity: preset.glow ? 0.6 : 0,
   });

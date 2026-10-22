@@ -112,8 +112,14 @@ export class Input {
     for (const p of pads) if (p && p.connected) { this.pad = p; break; }
     this.padDown.clear();
     if (!this.pad) return;
+    const map = this.padMap();
     this.pad.buttons.forEach((b, i) => {
-      const action = PAD_BUTTONS[i];
+      if (this.padCaptureCb && b.pressed && !this.prevPadButtons?.[i] && i !== 9) {
+        const cb = this.padCaptureCb;
+        this.padCaptureCb = null;
+        cb(i);
+      }
+      const action = map[i];
       if (action && b.pressed) {
         this.padDown.add(action);
         if (!this.prevPad.has(action)) this.padPressed.add(action);
@@ -121,6 +127,23 @@ export class Input {
       if (b.pressed || b.value > 0.2) this.lastDevice = 'gamepad';
     });
     this.prevPad = new Set(this.padDown);
+    this.prevPadButtons = this.pad.buttons.map((b) => b.pressed);
+  }
+
+  // Button index -> action from the player's gamepad bindings (falls back to the defaults).
+  padMap() {
+    const pb = this.settings.get('padBindings');
+    if (!pb) return PAD_BUTTONS;
+    if (this._padSrc === pb) return this._padMap;
+    const m = {};
+    for (const a in pb) m[pb[a]] = a;
+    this._padSrc = pb;
+    this._padMap = m;
+    return m;
+  }
+
+  capturePadNext(cb) {
+    this.padCaptureCb = cb;
   }
 
   // Raw key edge (fixed keys such as Enter that are not rebindable actions).

@@ -13,6 +13,7 @@ export function buildingMaterial() {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0.1, vertexColors: true });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = { value: 0 };
+    shader.uniforms.uNight = { value: nightLevel };
     m.userData.shader = shader;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
@@ -27,6 +28,7 @@ vMeters = uv;`);
 flat varying vec4 vFacade;
 varying vec2 vMeters;
 uniform float uTime;
+uniform float uNight;
 float fh(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
@@ -98,7 +100,8 @@ roughnessFactor = mix(roughnessFactor, 0.08, gGlass);`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
 metalnessFactor = mix(metalnessFactor, 0.85, gGlass * 0.8);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-totalEmissiveRadiance += gWinEmissive;
+// Daylight: lit windows barely show; the glass reflects the sky instead.
+totalEmissiveRadiance += gWinEmissive * mix(0.06, 1.0, uNight);
 #ifdef DEBUG_FACADE
 totalEmissiveRadiance = vec3(fract(vMeters.x / 2.7), fract(vMeters.y / 3.4), 0.0);
 #endif`);
@@ -182,7 +185,29 @@ export function paintedMaterial() {
   return m;
 }
 
+let nightLevel = 1;
 export function updateMaterials(time) {
   const s = materials.building && materials.building.userData.shader;
-  if (s) s.uniforms.uTime.value = time;
+  if (s) {
+    s.uniforms.uTime.value = time;
+    s.uniforms.uNight.value = nightLevel;
+  }
+}
+
+// V2 lighting: how "night" it is (window glow) and how wet the roads are (only in rain).
+export function setConditions(night, wet) {
+  nightLevel = night;
+  const r = roadMaterial();
+  // Puddles (low-roughness areas of the roughness map) only exist when it rains.
+  if (!r.userData.puddles) r.userData.puddles = r.roughnessMap;
+  const map = wet > 0 ? r.userData.puddles : null;
+  if (r.roughnessMap !== map) {
+    r.roughnessMap = map;
+    r.needsUpdate = true;
+  }
+  r.roughness = wet > 0 ? 0.55 : 0.92;
+  r.color.set(wet > 0 ? 0x74747a : 0x9a9aa0);
+  r.envMapIntensity = wet > 0 ? 1.3 : 0.7;
+  const sw = sidewalkMaterial();
+  sw.roughness = wet > 0 ? 0.4 : 0.62;
 }

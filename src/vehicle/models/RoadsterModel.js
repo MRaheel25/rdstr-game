@@ -118,9 +118,36 @@ export class RoadsterModel extends CarVisual {
     this.dentQueue = [];
   }
 
-  setPaint(key) {
+  // smooth: blend the colour over ~0.6 s (showroom / garage live preview).
+  setPaint(key, smooth = false) {
+    const from = this.paint.color.clone();
+    const fromE = this.paint.emissive.clone();
     applyPaint(this.paint, PAINTS[key] || PAINTS.pearlWhite);
     this.paintKey = key;
+    if (smooth) {
+      this.paintTween = { t: 0, from, to: this.paint.color.clone(), fromE, toE: this.paint.emissive.clone() };
+      this.paint.color.copy(from);
+      this.paint.emissive.copy(fromE);
+    } else this.paintTween = null;
+  }
+
+  // Showroom overrides (hotspots): { lights, roof, thrusters } or null in game.
+  setShowroom(state) {
+    this.showroom = state;
+    if (state && !this.canopyPivot && this.glassMesh) {
+      // Canopy lifts around a hinge at its rear edge.
+      this.glassMesh.geometry.computeBoundingBox();
+      const b = this.glassMesh.geometry.boundingBox;
+      const pivot = new THREE.Group();
+      pivot.position.set(0, b.max.y - 0.08, b.max.z - 0.05);
+      this.shell.add(pivot);
+      for (const m of [this.glassMesh, this.crack]) {
+        if (!m) continue;
+        pivot.add(m);
+        m.position.sub(pivot.position);
+      }
+      this.canopyPivot = pivot;
+    }
   }
 
   buildDoors(doors) {
@@ -384,6 +411,19 @@ export class RoadsterModel extends CarVisual {
   update(dt, v, ctx = {}) {
     super.update(dt, v);
     const st = this.state;
+    const sr = this.showroom;
+    if (this.paintTween) {
+      const tw = this.paintTween;
+      tw.t = Math.min(1, tw.t + dt / 0.6);
+      const k = tw.t * tw.t * (3 - 2 * tw.t);
+      this.paint.color.copy(tw.from).lerp(tw.to, k);
+      this.paint.emissive.copy(tw.fromE).lerp(tw.toE, k);
+      if (tw.t >= 1) this.paintTween = null;
+    }
+    if (this.canopyPivot) {
+      st.roof = damp(st.roof || 0, sr && sr.roof ? 1 : 0, 3, dt);
+      this.canopyPivot.rotation.x = st.roof * 0.42;
+    }
     st.doors = damp(st.doors, st.doorTarget, 4, dt);
     for (const d of this.doors) {
       // Butterfly: swing out and up around the front hinge.
@@ -402,23 +442,56 @@ export class RoadsterModel extends CarVisual {
       s.position.y = -st.wing * 0.18;
     }
     // Plate flips down while Rear Rockets fire.
-    st.plate = damp(st.plate, v.thrust.rocket ? 1 : 0, 12, dt);
+    st.plate = damp(st.plate, v.thrust.rocket || (sr && sr.thrusters) ? 1 : 0, sr ? 4 : 12, dt);
     this.platePivot.rotation.x = st.plate * 1.6;
     // Flight mode side vents.
-    st.vents = damp(st.vents, v.mode.id === 'flight' ? 1 : 0, 4, dt);
+    st.vents = damp(st.vents, v.mode.id === 'flight' || (sr && sr.thrusters) ? 1 : 0, 4, dt);
     for (const vt of this.vents) vt.pivot.rotation.z = -vt.side * st.vents * 0.9;
-    this.mats.vent.color.setRGB(0.25, 0.78, 1).multiplyScalar(0.2 + st.vents * 3 * (v.thrust.air || v.thrust.hover ? 1.5 : 1));
+    this.mats.vent.color.setRGB(0.25, 0.78, 1).multiplyScalar(0.2 + st.vents * 3 * (v.thrust.air || v.thrust.hover || (sr && sr.thrusters) ? 1.5 : 1));
     // Lights: ghost mode kills everything, brake lights brighten, reverse lights.
     const ghost = v.energy && v.energy.ghost;
-    st.lights = damp(st.lights, ghost ? 0 : 1, 8, dt);
+    st.lights = damp(st.lights, ghost || (sr && !sr.lights) ? 0 : 1, 8, dt);
     st.brake = damp(st.brake, v.braking ? 1 : 0, 14, dt);
     this.mats.tail.color.setRGB(1, 0.06, 0.12).multiplyScalar((2.4 + st.brake * 6) * st.lights);
     this.mats.head.color.setRGB(1, 0.97, 0.92).multiplyScalar(6 * st.lights);
     this.mats.reverse.color.setRGB(1, 1, 1).multiplyScalar(v.reversing ? 4 * st.lights : 0.15);
     for (const h of this.headlights) h.intensity = 380 * st.lights * (ctx.headlights === false ? 0 : 1);
+    // V2 body motion: the shell pitches under braking / acceleration and rolls in corners on
+    // a spring-damper (wheels stay planted), so weight transfer is visible.
+    if (!sr) {
+      const fwd = v.fwdSpeed || 0;
+      const accel = dt > 0 ? (fwd - (st.lastFwd ?? fwd)) / dt : 0;
+      st.lastFwd = fwd;
+      st.accelF = damp(st.accelF || 0, clamp(accel, -25, 25), 8, dt);
+      const lat = (v.yawRate ?? (v.body ? v.body.angvel().y : 0)) * fwd;
+      st.accelL = damp(st.accelL || 0, clamp(-lat, -25, 25), 8, dt);
+      const onGround = v.groundedCount >= 3;
+      const tp = onGround ? clamp(st.accelF * 0.0028, -0.045, 0.035) : 0;
+      const tr = onGround ? clamp(st.accelL * 0.0024, -0.05, 0.05) : 0;
+      for (const [k, target] of [['p', tp], ['r', tr]]) {
+        const vk = `${k}v`;
+        st[vk] = (st[vk] || 0) + ((target - (st[k] || 0)) * 140 - (st[vk] || 0) * 14) * dt;
+        st[k] = (st[k] || 0) + st[vk] * dt;
+      }
+      this.shell.rotation.x = st.p;
+      this.shell.rotation.z = st.r;
+      this.shell.position.y = GROUND - Math.abs(st.r) * 0.3 - Math.max(0, -st.p) * 0.4;
+    }
     // Damage visuals.
     const dmg = 1 - v.hp / v.maxHp;
     st.damage = dmg;
+    // Scratches: the clearcoat dulls and the paint gets rougher as damage builds up.
+    if (!this.paintTween && Math.abs((st.paintDmg ?? -1) - dmg) > 0.02) {
+      st.paintDmg = dmg;
+      const pr = PAINTS[this.paintKey] || PAINTS.pearlWhite;
+      this.paint.roughness = Math.min(0.9, pr.roughness + dmg * 0.4);
+      this.paint.clearcoat = pr.clearcoat * (1 - dmg * 0.75);
+    }
+    // Broken headlight (left) at heavy damage, the right one flickers.
+    if (dmg > 0.6) {
+      this.headlights[0].intensity = 0;
+      if (Math.random() < 0.08) this.headlights[1].intensity *= 0.2;
+    }
     if (this.crack) this.crack.material.opacity = clamp((dmg - 0.3) * 1.6, 0, 0.85);
     if (this.splitter.visible && dmg > 0.55) {
       this.splitter.visible = false;

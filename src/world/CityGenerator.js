@@ -8,7 +8,9 @@ import * as M from './Materials.js';
 import { RNG } from '../util/math.js';
 import { G } from '../core/Physics.js';
 
-export const ROAD_W = 16;
+// V2: wider roads. Streets are 20 m (2 lanes each way, 4.7 m lanes); boulevards 28 m (3 lanes each way).
+export const ROAD_W = 20;
+export const BOULEVARD_W = 28;
 export const SIDEWALK_W = 5;
 export const CURB_H = 0.12;
 export const CHUNK = 240;
@@ -17,6 +19,26 @@ const WALL_COLORS = [
   [0.3, 0.31, 0.33], [0.4, 0.38, 0.35], [0.2, 0.23, 0.27], [0.38, 0.26, 0.22],
   [0.46, 0.44, 0.41], [0.15, 0.17, 0.21], [0.33, 0.35, 0.38], [0.26, 0.22, 0.2],
 ];
+
+// V2 modular building styles: base (podium), middle (facade style + colour palette, vertical
+// fins) and top (crown). Combined per building so many different towers come from a few rules.
+export const BUILDING_STYLES = {
+  glassTower: { facade: 2, colors: [[0.16, 0.24, 0.3], [0.12, 0.18, 0.24], [0.2, 0.28, 0.32], [0.22, 0.24, 0.22]], podium: 0.6, fins: 0.45, crowns: ['spire', 'flat', 'stepped'] },
+  office: { facade: 1, colors: WALL_COLORS, podium: 0.55, fins: 0.3, crowns: ['flat', 'stepped', 'flat'] },
+  hotel: { facade: 3, colors: [[0.55, 0.5, 0.42], [0.48, 0.4, 0.34], [0.6, 0.58, 0.52], [0.42, 0.44, 0.48]], podium: 0.85, fins: 0, crowns: ['stepped', 'flat'] },
+  brick: { facade: 3, colors: [[0.45, 0.24, 0.18], [0.5, 0.3, 0.22], [0.38, 0.2, 0.16], [0.52, 0.4, 0.3]], podium: 0, fins: 0, crowns: ['flat', 'tank'] },
+  industrial: { facade: 4, colors: [[0.4, 0.4, 0.38], [0.32, 0.34, 0.36]], podium: 0, fins: 0, crowns: ['flat'] },
+};
+const PODIUM_COLORS = [[0.12, 0.12, 0.13], [0.62, 0.6, 0.56], [0.3, 0.2, 0.16], [0.18, 0.2, 0.24]];
+
+function pickStyle(rng, info, h) {
+  if (info.buildingStyles) return BUILDING_STYLES[rng.pick(info.buildingStyles)];
+  if (info.style === 3) return rng.chance(0.5) ? BUILDING_STYLES.brick : BUILDING_STYLES.hotel;
+  if (info.style === 4) return BUILDING_STYLES.industrial;
+  if (h > 80) return rng.chance(0.6) ? BUILDING_STYLES.glassTower : BUILDING_STYLES.office;
+  if (h > 40) return BUILDING_STYLES[rng.pick(['office', 'glassTower', 'hotel', 'office'])];
+  return BUILDING_STYLES[rng.pick(['brick', 'office', 'hotel'])];
+}
 
 export class CityGenerator {
   constructor(ctx) {
@@ -120,50 +142,50 @@ export class CityGenerator {
   }
 
   // Street grid with intersections, crosswalks, lane markings, sidewalks and building lots.
-  buildGrid(xs, zs, lotFn) {
+  // widthFn(axis, index) gives each street's width ('ns' = the street at xs[i], 'ew' = zs[j]).
+  buildGrid(xs, zs, lotFn, widthFn = () => ROAD_W) {
     const g = this.graph;
     const nodes = [];
     for (let i = 0; i < xs.length; i++) {
       nodes[i] = [];
       for (let j = 0; j < zs.length; j++) nodes[i][j] = g.node(xs[i], 0, zs[j], 'grid');
     }
-    const hw = ROAD_W / 2;
+    const wx = xs.map((_, i) => widthFn('ns', i));
+    const wz = zs.map((_, j) => widthFn('ew', j));
+    this.gridW = { xs, zs, wx, wz };
+    const lanesFor = (w) => (w >= BOULEVARD_W - 0.1 ? 3 : 2);
     // Intersections.
     for (let i = 0; i < xs.length; i++) {
       for (let j = 0; j < zs.length; j++) {
-        const x = xs[i];
-        const z = zs[j];
-        this.chunk(x, z).road.flatRect(x, 0.02, z, ROAD_W, ROAD_W, 0, 8);
+        this.chunk(xs[i], zs[j]).road.flatRect(xs[i], 0.02, zs[j], wx[i], wz[j], 0, 8);
       }
     }
     // Segments along Z (north-south streets) and X (east-west avenues).
     for (let i = 0; i < xs.length; i++) {
       for (let j = 0; j < zs.length - 1; j++) {
         const x = xs[i];
-        const z0 = zs[j] + hw;
-        const z1 = zs[j + 1] - hw;
-        this.roadSegment(x, z0, x, z1);
-        g.edge(nodes[i][j], nodes[i][j + 1], [nodes[i][j], nodes[i][j + 1]], { name: streetName(i, 'ns') });
+        const lanes = lanesFor(wx[i]);
+        this.roadSegment(x, zs[j] + wz[j] / 2, x, zs[j + 1] - wz[j + 1] / 2, { width: wx[i], lanes });
+        g.edge(nodes[i][j], nodes[i][j + 1], [nodes[i][j], nodes[i][j + 1]], { name: streetName(i, 'ns'), lanes, laneWidth: (wx[i] / 2 - 0.6) / lanes });
       }
     }
     for (let j = 0; j < zs.length; j++) {
       for (let i = 0; i < xs.length - 1; i++) {
         const z = zs[j];
-        const x0 = xs[i] + hw;
-        const x1 = xs[i + 1] - hw;
-        this.roadSegment(x0, z, x1, z);
-        g.edge(nodes[i][j], nodes[i + 1][j], [nodes[i][j], nodes[i + 1][j]], { name: streetName(j, 'ew') });
+        const lanes = lanesFor(wz[j]);
+        this.roadSegment(xs[i] + wx[i] / 2, z, xs[i + 1] - wx[i + 1] / 2, z, { width: wz[j], lanes });
+        g.edge(nodes[i][j], nodes[i + 1][j], [nodes[i][j], nodes[i + 1][j]], { name: streetName(j, 'ew'), lanes, laneWidth: (wz[j] / 2 - 0.6) / lanes });
       }
     }
     // Lots.
     for (let i = 0; i < xs.length - 1; i++) {
       for (let j = 0; j < zs.length - 1; j++) {
-        const x0 = xs[i] + hw;
-        const x1 = xs[i + 1] - hw;
-        const z0 = zs[j] + hw;
-        const z1 = zs[j + 1] - hw;
+        const x0 = xs[i] + wx[i] / 2;
+        const x1 = xs[i + 1] - wx[i + 1] / 2;
+        const z0 = zs[j] + wz[j] / 2;
+        const z1 = zs[j + 1] - wz[j + 1] / 2;
         const info = lotFn((x0 + x1) / 2, (z0 + z1) / 2, i, j);
-        this.lot(x0, z0, x1, z1, info);
+        this.lot(x0, z0, x1, z1, { i, j, ...info });
       }
     }
   }
@@ -291,14 +313,27 @@ export class CityGenerator {
     let h = rng.float(hMin, hMax);
     if (info.tallChance && rng.chance(info.tallChance)) h *= rng.float(1.6, 2.4);
     h = Math.round(h / 3.4) * 3.4 + 0.6;
-    const style = info.style ?? (h > 80 ? (rng.chance(0.6) ? 2 : 1) : rng.pick([1, 1, 3, 3, 2]));
-    const col = rng.pick(WALL_COLORS);
+    const kit = pickStyle(rng, info, h);
+    const style = info.style ?? kit.facade;
+    const col = rng.pick(kit.colors);
     const tint = rng.float(0.85, 1.1);
     b.setColor(col[0] * tint, col[1] * tint, col[2] * tint);
     const seed = rng.float(0, 100);
     const lit = info.lit ?? rng.float(0.25, 0.6);
     b.setFacade(seed, style, style === 4 ? 6 : 3.4, lit);
-    const base = CURB_H;
+    let base = CURB_H;
+    // Base: a podium with a contrasting colour and a canopy line over the shop fronts.
+    if (rng.chance(kit.podium) && h > 18) {
+      const pc = rng.pick(PODIUM_COLORS);
+      const ph = 4.6;
+      b.setColor(...pc);
+      b.setFacade(seed + 1, 1, 4.6, 0.8);
+      b.box(cx, base + ph / 2, cz, sx + 1.2, ph, sz + 1.2, 0, { baseY: base });
+      this.physics.fixedBox(cx, base + ph / 2, cz, (sx + 1.2) / 2, ph / 2, (sz + 1.2) / 2, { kind: 'building' });
+      this.batch(cx, cz, 'darkMetal').box(cx, base + ph + 0.12, cz, sx + 2.4, 0.24, sz + 2.4, 0);
+      b.setColor(col[0] * tint, col[1] * tint, col[2] * tint);
+      b.setFacade(seed, style, style === 4 ? 6 : 3.4, lit);
+    }
     // Main mass (possibly with setback tiers on tall towers).
     let tiers = h > 70 && rng.chance(0.6) ? rng.int(2, 3) : 1;
     let tx = sx;
@@ -320,6 +355,50 @@ export class CityGenerator {
       tz *= rng.float(0.65, 0.85);
     }
     const topY = y;
+    // Middle: vertical fins on the main facade (no colliders, they barely protrude).
+    if (kit.fins && rng.chance(kit.fins)) {
+      const fb = this.batch(cx, cz, 'darkMetal');
+      const step = rng.pick([2.7, 3.2, 5.4]);
+      const fh = Math.min(h, topY - base) - 1;
+      for (let u = -sx / 2 + step / 2; u < sx / 2; u += step) {
+        fb.box(cx + u, base + 1 + fh / 2 + 4.6, cz + sz / 2 + 0.15, 0.22, fh - 4.6, 0.3, 0);
+        fb.box(cx + u, base + 1 + fh / 2 + 4.6, cz - sz / 2 - 0.15, 0.22, fh - 4.6, 0.3, 0);
+      }
+      for (let u = -sz / 2 + step / 2; u < sz / 2; u += step) {
+        fb.box(cx + sx / 2 + 0.15, base + 1 + fh / 2 + 4.6, cz + u, 0.3, fh - 4.6, 0.22, 0);
+        fb.box(cx - sx / 2 - 0.15, base + 1 + fh / 2 + 4.6, cz + u, 0.3, fh - 4.6, 0.22, 0);
+      }
+    }
+    // Top: crown variants.
+    const crown = rng.pick(kit.crowns);
+    if (crown === 'stepped') {
+      b.setFacade(seed, 0, 3.4, 0);
+      let w = tx;
+      let d = tz;
+      let yy = topY;
+      for (let k = 0; k < 3; k++) {
+        w *= 0.8;
+        d *= 0.8;
+        b.setColor(col[0] * (0.8 - k * 0.1), col[1] * (0.8 - k * 0.1), col[2] * (0.8 - k * 0.1));
+        b.box(cx, yy + 1.4, cz, w, 2.8, d, 0);
+        this.physics.fixedBox(cx, yy + 1.4, cz, w / 2, 1.4, d / 2, { kind: 'building' });
+        yy += 2.8;
+      }
+    } else if (crown === 'spire' && h > 60) {
+      const sh = rng.float(14, 30);
+      b.setFacade(seed, 0, 3.4, 0);
+      b.setColor(0.7, 0.72, 0.75);
+      b.box(cx, topY + sh / 2, cz, 1.2, sh, 1.2, 0);
+      this.beacons.push(new THREE.Vector3(cx, topY + sh + 0.4, cz));
+    } else if (crown === 'tank') {
+      b.setFacade(seed, 0, 3.4, 0);
+      b.setColor(0.42, 0.3, 0.2);
+      const tx0 = cx + rng.float(-tx * 0.2, tx * 0.2);
+      const tz0 = cz + rng.float(-tz * 0.2, tz * 0.2);
+      b.box(tx0, topY + 4.5, tz0, 3.2, 3.4, 3.2, Math.PI / 4);
+      b.setColor(0.2, 0.2, 0.22);
+      for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) b.box(tx0 + ox, topY + 1.4, tz0 + oz, 0.2, 2.8, 0.2, 0);
+    }
     // Beveled crown / parapet.
     b.setFacade(seed, 0, 3.4, 0);
     b.setColor(col[0] * 0.7, col[1] * 0.7, col[2] * 0.7);
@@ -397,6 +476,10 @@ export class CityGenerator {
         const m = this.addStatic(new THREE.Mesh(c.lights.toGeometry(), M.emissiveMaterial(0xdfeeff, 3.2)), false, { shadows: false });
         m.userData.decal = true;
       }
+      // V2 landmark trims.
+      if (c.policeBlue && !c.policeBlue.empty) this.addStatic(new THREE.Mesh(c.policeBlue.toGeometry(), M.emissiveMaterial(0x2a5cff, 3)), false, { shadows: false }).userData.decal = true;
+      if (c.chargeGlow && !c.chargeGlow.empty) this.addStatic(new THREE.Mesh(c.chargeGlow.toGeometry(), M.emissiveMaterial(0x40e8ff, 2.4)), false, { shadows: false }).userData.decal = true;
+      if (c.metalPole && !c.metalPole.empty) this.addStatic(new THREE.Mesh(c.metalPole.toGeometry(), M.metalMaterial(0xc0c4c8)), true);
       if (c.paint && !c.paint.empty) {
         const m = this.addStatic(new THREE.Mesh(c.paint.toGeometry(), M.paintedMaterial()), true);
         m.castShadow = true;

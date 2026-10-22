@@ -19,6 +19,8 @@ function laneOffsets(edge) {
   if (edge.kind === 'highway') return [2.1, 5.8, 9.6];
   if (edge.kind === 'ramp') return [2.2];
   if (edge.lanes <= 1) return [2.6];
+  // Lane centres from the edge's lane count / width (grid streets and boulevards).
+  if (edge.lanes >= 2 && edge.laneWidth > 3.6) return [...Array(edge.lanes)].map((_, k) => 0.35 + edge.laneWidth * (k + 0.5));
   return [2.0, 5.5];
 }
 

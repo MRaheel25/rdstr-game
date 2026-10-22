@@ -1,6 +1,9 @@
 // Game orchestrator: owns all systems, runs the fixed-step physics loop with render
 // interpolation, time scaling (slow motion / hit stop) and the top-level state machine.
+import { loadGrafigator } from '../world/Grafigator.js';
 import * as THREE from 'three';
+
+const WEATHER_LINE = { clear: 'clear skies', cloudy: 'overcast', rain: 'rain', fog: 'thick fog', storm: 'storm warning' };
 import { Settings, QUALITY_ORDER } from './Settings.js';
 import { Input } from './Input.js';
 import { Renderer } from './Renderer.js';
@@ -33,6 +36,8 @@ import { StyleScore } from '../game/Score.js';
 import { ActivityManager } from '../game/Activities.js';
 import { Menu } from '../ui/Menu.js';
 import { XRay } from '../fx/XRay.js';
+import { Services } from '../game/Services.js';
+import { Pedestrians } from '../world/Pedestrians.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -78,6 +83,7 @@ export class Game {
     this.camera = this.gfx.camera;
     this.setLoading(15, 'Loading physics');
     this.physics = await Physics.create();
+    await loadGrafigator();
     this.setLoading(30, 'Generating Halcyon Bay');
     await nextFrame();
     const t0 = performance.now();
@@ -130,6 +136,12 @@ export class Game {
     };
     this.setupPursuitEvents();
     this.audio = new AudioSystem(this);
+    this.services = new Services(this);
+    this.peds = new Pedestrians(this);
+    this.world.env.onLightning = (k) => {
+      this.gfx.setFlash(0.28 * k, 0xdfe6ff);
+      this.audio.sfx.thunder(k);
+    };
     this.progress.apply(this.player);
     // Rapier only builds its query structures during step(): run one so start-up raycasts
     // (activity marker heights) see the freshly built city.
@@ -199,6 +211,7 @@ export class Game {
       this.updatePlayerControls(realDt);
       this.physics.advance(dt, (h) => this.prePhysics(h), (h) => this.postPhysics(h));
       this.updateGameplay(dt, realDt);
+      this.progress.tickPlaytime(realDt);
     }
     this.playerVisual.update(dt, this.player);
     for (const n of this.npcs) n.model.update(dt, n.vehicle, n.ctx || {});
@@ -207,6 +220,7 @@ export class Game {
     this.world.update(dt, this.playerVisual.root.position, this.camera, this.player.velocity);
     this.playerVisual.root.updateMatrixWorld();
     this.vfx.updateJets(dt, this.player);
+    this.player.wetGrip = this.isWet() ? 0.84 : 1;
     this.playerFX.update(dt, { wet: this.isWet() });
     this.updateSmokeLighting(realDt);
     this.vfx.update(dt, realDt);
@@ -276,6 +290,7 @@ export class Game {
     c.pitch = a.pitch;
     c.yaw = a.yaw;
     c.roll = a.roll;
+    this.flightAssist(realDt);
     const e = this.player.energy;
     e.ghost = i.down('ghost') && e.battery > 0.5;
     if (this.inputLock) {
@@ -448,6 +463,9 @@ export class Game {
     this.stunts.update(dt, realDt, this.player, this.input);
     this.updateWater(realDt);
     this.updateAirStations();
+    this.services.update(realDt);
+    this.updateLandingPreview();
+    this.peds.update(dt, realDt);
     this.pursuitActive = this.heat.phase !== 'none';
     if (this.player.hp <= 0 && !this.player.wrecked) this.onPlayerWrecked();
     this.takedownCam.cooldown = Math.max(0, this.takedownCam.cooldown - realDt);
@@ -563,7 +581,7 @@ export class Game {
 
   isWet() {
     const p = this.world.env.preset;
-    return (p.rain && this.settings.get('rain')) || (p.wet ?? 1) > 1.2;
+    return !!p.rain;
   }
 
   // Driving into the bay or the canal: splash, sink, reset to the nearest road.
@@ -679,15 +697,21 @@ export class Game {
   }
 
   // ---- game flow: title -> (intro flyover) -> play; pause -> quit to title -----------------
-  startPlay({ continueStory = false, activity = null } = {}) {
+  startPlay({ continueStory = false, activity = null, district = null, tod = null, weather = null } = {}) {
     const m = this.menu;
+    this.services.cancel();
+    if (tod || weather) this.setConditions(tod || this.settings.get('tod'), weather || this.settings.get('weather'));
     m.close();
     m.leaveShowroom();
     this.audio.setMenu(false);
     this.police.clearAll();
     this.heat.clear('reset');
     this.restorePlayer();
-    let spot = { x: 3.8, z: 70, yaw: 0 };
+    let spot = { x: 2.6, z: 70, yaw: 0 };
+    if (district) {
+      const d = this.world.districtStart(district);
+      spot = { x: d.position.x, y: d.position.y, z: d.position.z, yaw: d.yaw };
+    }
     const target = activity || (continueStory ? m.nextMission() : null);
     if (target) {
       // Park just before the activity's marker, facing it.
@@ -697,8 +721,167 @@ export class Game {
     }
     this.activities.teleport(new THREE.Vector3(spot.x, spot.y || 0, spot.z), spot.yaw);
     this.hud.show(true);
+    this.hud.setPlayerName(this.progress.playerName);
     this.pendingActivity = activity;
     this.playIntro();
+  }
+
+  // V2 Assisted Flight (Settings > Controls, on by default). In the air the car holds itself
+  // level; Space lifts, Shift boosts, a tap of Q / E does a full barrel roll and W / S a full
+  // flip, then the car levels out again. Pro Flight keeps the manual controls (with gentle
+  // stabilisation). Either way the car straightens up before it lands.
+  flightAssist(realDt) {
+    const v = this.player;
+    const c = v.controls;
+    const i = this.input;
+    const assist = this.settings.get('flightAssist') !== false;
+    v.flightAssist = assist;
+    const air = v.groundedCount === 0 && v.airTime > 0.1;
+    v.airAssist = { on: air, strength: assist ? 1 : 0.12, landing: 0 };
+    if (!air) {
+      this.maneuver = null;
+      return;
+    }
+    if (!assist) return;
+    // One-key moves.
+    if (!this.maneuver) {
+      const k = i.pressed('rollLeft') ? ['roll', -1] : i.pressed('rollRight') ? ['roll', 1] : i.pressed('throttle') ? ['pitch', 1] : i.pressed('brake') ? ['pitch', -1] : null;
+      if (k) this.maneuver = { axis: k[0], dir: k[1], angle: 0, t: 0 };
+    }
+    c.pitch = 0;
+    c.roll = 0;
+    const m = this.maneuver;
+    if (m) {
+      // Integrate the rotation about the manoeuvre axis (local frame).
+      const av = v.body.angvel();
+      const w = new THREE.Vector3(av.x, av.y, av.z).applyQuaternion(v.quaternion.clone().invert());
+      m.angle += Math.abs(m.axis === 'roll' ? w.z : w.x) * realDt;
+      m.t += realDt;
+      if (m.axis === 'roll') c.roll = m.dir;
+      else c.pitch = m.dir;
+      if (m.angle > Math.PI * 2 - 0.7 || m.t > 3) this.maneuver = null;
+    }
+    v.airAssist.strength = m ? 0 : 1;
+  }
+
+  // Landing preview: ballistic path of the car until it hits the ground, with a ring marker
+  // (green = upright, amber = will land badly). Also tells the stabiliser time-to-land.
+  updateLandingPreview() {
+    const v = this.player;
+    if (!this.landMark) {
+      const geo = new THREE.RingGeometry(1.7, 2.2, 40).rotateX(-Math.PI / 2);
+      this.landMark = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x6cff8f, transparent: true, opacity: 0.8, depthWrite: false }));
+      const dot = new THREE.Mesh(new THREE.CircleGeometry(0.35, 16).rotateX(-Math.PI / 2), this.landMark.material);
+      this.landMark.add(dot);
+      this.landMark.renderOrder = 3;
+      this.landMark.userData.noCollider = true;
+      this.scene.add(this.landMark);
+    }
+    const mk = this.landMark;
+    const air = v.groundedCount === 0 && v.airTime > 0.15 && this.state === 'playing';
+    if (!air) {
+      mk.visible = false;
+      return;
+    }
+    this.landTimer = (this.landTimer || 0) - 1;
+    if (this.landTimer > 0 && mk.visible) return;
+    this.landTimer = 2;
+    const p = v.position.clone();
+    const vel = v.velocity.clone();
+    const dir = new THREE.Vector3();
+    const step = 0.08;
+    let hit = null;
+    let t = 0;
+    for (; t < 4; t += step) {
+      const nv = vel.clone();
+      nv.y -= 9.81 * step;
+      dir.copy(nv).multiplyScalar(step);
+      const len = dir.length();
+      if (len < 1e-4) break;
+      const h = this.physics.raycast(p, dir.clone().divideScalar(len), len + 0.6, v.wheelQueryGroups, v.body);
+      if (h) {
+        hit = p.clone().addScaledVector(dir, h.timeOfImpact / len);
+        hit.n = h.normal;
+        break;
+      }
+      p.add(dir);
+      vel.copy(nv);
+    }
+    if (!hit) {
+      mk.visible = false;
+      return;
+    }
+    mk.visible = true;
+    mk.position.set(hit.x, hit.y + 0.08, hit.z);
+    const good = v.up.y > 0.8;
+    mk.material.color.set(good ? 0x6cff8f : 0xffb02e);
+    mk.scale.setScalar(1 + Math.min(1.5, t * 0.4));
+    if (v.airAssist) v.airAssist.landing = t;
+  }
+
+  // V2: time of day + weather (saved, applied to sky, lights, fog, rain, roads).
+  setConditions(tod, weather) {
+    this.settings.set('tod', tod);
+    this.settings.set('weather', weather);
+    this.world.env.setConditions(tod, weather);
+  }
+
+  // Small still of the city rendered from the game (district cards in the play setup).
+  renderPreview(start, w = 320, h = 180) {
+    const r = this.gfx.renderer;
+    const world = this.world;
+    const cam = new THREE.PerspectiveCamera(55, r.domElement.width / r.domElement.height, 0.5, 2500);
+    const p = start.position;
+    // Steep aerial view from the outer side of the start point, so the district itself fills
+    // the frame rather than the downtown skyline behind it.
+    const out = new THREE.Vector3(p.x, 0, p.z);
+    if (out.lengthSq() < 1e4) out.set(0.4, 0, 1);
+    out.normalize();
+    cam.position.set(p.x + out.x * 60, p.y + 75, p.z + out.z * 60);
+    cam.lookAt(p.x - out.x * 30, p.y, p.z - out.z * 30);
+    cam.updateMatrixWorld();
+    cam.aspect = w / h;
+    cam.updateProjectionMatrix();
+    const vis = world.gen.staticMeshes.map((m) => m.visible);
+    for (const m of world.gen.staticMeshes) m.visible = true;
+    world.env.update(0, p, cam);
+    world.props.refresh(cam.position, 1);
+    // Render into a float target and tone map on the CPU (render targets skip three's
+    // tone mapping / sRGB output, and reading the canvas back is unreliable).
+    const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.FloatType, depthBuffer: true });
+    const prevTarget = r.getRenderTarget();
+    r.setRenderTarget(rt);
+    r.render(this.scene, cam);
+    const px = new Float32Array(w * h * 4);
+    r.readRenderTargetPixels(rt, 0, 0, w, h, px);
+    r.setRenderTarget(prevTarget);
+    rt.dispose();
+    world.gen.staticMeshes.forEach((m, i) => (m.visible = vis[i]));
+    world.props.dirty = true;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    const ex = r.toneMappingExposure / 0.6;
+    const aces = (x) => {
+      x *= ex;
+      const v = (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14);
+      const l = Math.min(1, Math.max(0, v));
+      return 255 * (l <= 0.0031308 ? l * 12.92 : 1.055 * Math.pow(l, 1 / 2.4) - 0.055);
+    };
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const si = ((h - 1 - y) * w + x) * 4;
+        const di = (y * w + x) * 4;
+        img.data[di] = aces(px[si]);
+        img.data[di + 1] = aces(px[si + 1]);
+        img.data[di + 2] = aces(px[si + 2]);
+        img.data[di + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return c.toDataURL('image/jpeg', 0.8);
   }
 
   // Intro flyover of the city that ends behind the car.
@@ -723,7 +906,9 @@ export class Game {
     this.state = 'intro';
     this.hud.show(false);
     this.cameraCtl.playShot({ type: 'path', curve, lookCurve: look, duration: 6.5, fov: 55, onDone: () => this.endIntro() });
-    this.banner.show('HALCYON BAY', '2:47 AM · after the rain', 'cool', 4);
+    const TOD_LINE = { morning: '7:10 AM', noon: '12:30 PM', golden: '6:05 PM', sunset: '7:40 PM', night: '2:47 AM' };
+    const env = this.world.env.preset;
+    this.banner.show('HALCYON BAY', `${TOD_LINE[env.tod] || ''} · ${WEATHER_LINE[env.weather] || ''}`, 'cool', 4);
   }
 
   endIntro() {
@@ -761,6 +946,11 @@ export class Game {
     fx.rainLens += ((raining && p.speed > 12 ? Math.min(1, p.speed / 60) : 0) - fx.rainLens) * Math.min(1, realDt * 2);
     const hpFrac = p.hp / p.maxHp;
     fx.damage = hpFrac < 0.3 ? (0.25 + 0.25 * Math.sin(this.time * 6)) * (1 - hpFrac / 0.3) : 0;
+    // V2 visible damage: smoke from under the hood below 50% chassis, darker and thicker lower.
+    if (hpFrac < 0.5 && !p.wrecked && Math.random() < realDt * (6 + (0.5 - hpFrac) * 30)) {
+      const hood = p.position.clone().addScaledVector(p.forward, 1.3).addScaledVector(p.up, 0.7);
+      this.vfx.tireSmoke(hood, p.velocity.clone().multiplyScalar(0.6).add(new THREE.Vector3(0, 1.6, 0)), 0.5 + (0.5 - hpFrac), hpFrac < 0.25 ? [0.12, 0.12, 0.12] : [0.45, 0.45, 0.47]);
+    }
   }
 
   // Automatic quality drop if FPS stays under 45 for 5 seconds.

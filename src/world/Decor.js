@@ -1,7 +1,7 @@
 // Neon signs and rooftop billboards with fictional brands, aviation beacons and the
 // glowing Air Station pads. Signs also register as light sources for wet-road streaks.
 import * as THREE from 'three';
-import { neonSign, BRANDS } from './Textures.js';
+import { neonSign, BRANDS, RANDOM_BRANDS, GRAFIGATOR_BRAND } from './Textures.js';
 import { GeometryBatch } from './GeometryBatch.js';
 
 export function buildDecor(gen) {
@@ -13,7 +13,7 @@ export function buildDecor(gen) {
   gen.neonLights = [];
   const box = gen.batch(0, 0, 'darkMetal');
   for (const s of gen.signSpots) {
-    const brand = s.brand % BRANDS.length;
+    const brand = s.brand % RANDOM_BRANDS;
     const w = s.vertical ? Math.min(3.2, s.width * 0.3) : s.width;
     const h = s.vertical ? w * 4 : s.width * 0.25;
     const b = getBatch(brand);
@@ -32,9 +32,16 @@ export function buildDecor(gen) {
   }
   // Rooftop billboards on mid-height buildings facing the avenues.
   const rng = gen.rng;
+  // Three of the billboards along the main boulevards advertise the GRAFIGATOR studio,
+  // drawn exactly like every other fictional brand.
+  let grafLeft = 3;
   for (const bd of gen.buildings) {
     if (bd.y0 > 1 || bd.h < 30 || bd.h > 80 || !rng.chance(0.18)) continue;
-    const brand = rng.int(0, BRANDS.length - 1);
+    let brand = rng.int(0, RANDOM_BRANDS - 1);
+    if (grafLeft > 0 && (Math.abs(bd.x) < 140 || Math.abs(bd.z) < 140) && Math.hypot(bd.x, bd.z) > 150) {
+      brand = GRAFIGATOR_BRAND;
+      grafLeft--;
+    }
     const top = bd.y0 + bd.h;
     const w = Math.min(bd.hx * 1.6, 22);
     const h = w * 0.3;
