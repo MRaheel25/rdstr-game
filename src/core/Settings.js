@@ -67,6 +67,11 @@ const DEFAULTS = {
   masterVolume: 0.8,
   musicVolume: 0.55,
   sfxVolume: 0.9,
+  // V3 sound options.
+  engineVolume: 0.8,
+  uiVolume: 0.7,
+  musicOn: true,
+  musicStyle: 'synthwave', // synthwave | chill | dnb
   units: 'mph',
   rain: true,
   timeOfDay: 'night', // night | dusk | rain

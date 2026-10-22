@@ -11,38 +11,48 @@ export class CarAudio {
     this.out = e.gain(1);
     this.out.connect(e.world);
 
-    // --- Motor -------------------------------------------------------------------
+    // --- Motor (V3): warm, deep EV hum. Sine + soft triangle layers through a low-pass, a
+    // gentle speed tone with capped pitch, a sub surge on hard acceleration, all into a soft
+    // compressor. No square / saw layers and nothing above ~2 kHz.
     this.motor = e.gain(0);
-    this.motor.connect(this.out);
-    this.whine = e.osc('sawtooth', 200);
-    this.whine2 = e.osc('triangle', 400);
-    this.whineF = e.filter('bandpass', 600, 2.2);
-    this.whineG = e.gain(0);
-    this.whine.connect(this.whineF);
-    this.whine2.connect(this.whineF);
-    this.whineF.connect(this.whineG);
-    this.whineG.connect(this.motor);
-    this.sub = e.osc('sine', 40);
+    this.motorComp = e.ctx.createDynamicsCompressor();
+    this.motorComp.threshold.value = -22;
+    this.motorComp.knee.value = 18;
+    this.motorComp.ratio.value = 3;
+    this.motorComp.attack.value = 0.02;
+    this.motorComp.release.value = 0.25;
+    this.motorLP = e.filter('lowpass', 900, 0.5);
+    this.motor.connect(this.motorLP);
+    this.motorLP.connect(this.motorComp);
+    this.motorComp.connect(this.out);
+    this.hum = e.osc('sine', 60);
+    this.hum2 = e.osc('triangle', 120);
+    this.hum3 = e.osc('sine', 180);
+    this.humG = e.gain(0);
+    const h2 = e.gain(0.35);
+    const h3 = e.gain(0.12);
+    this.hum.connect(this.humG);
+    this.hum2.connect(h2);
+    h2.connect(this.humG);
+    this.hum3.connect(h3);
+    h3.connect(this.humG);
+    this.humG.connect(this.motor);
+    this.tone = e.osc('sine', 240);
+    this.toneF = e.filter('lowpass', 700, 0.4);
+    this.toneG = e.gain(0);
+    this.tone.connect(this.toneF);
+    this.toneF.connect(this.toneG);
+    this.toneG.connect(this.motor);
+    this.sub = e.osc('sine', 38);
     this.subG = e.gain(0);
     this.sub.connect(this.subG);
     this.subG.connect(this.motor);
-    this.inverter = e.osc('square', 1100);
-    this.invF = e.filter('bandpass', 2400, 6);
-    this.invG = e.gain(0);
-    this.inverter.connect(this.invF);
-    this.invF.connect(this.invG);
-    this.invG.connect(this.motor);
-    this.turbine = e.osc('sine', 2600);
-    this.turbine2 = e.osc('sine', 3910);
-    this.turbG = e.gain(0);
-    this.turbine.connect(this.turbG);
-    this.turbine2.connect(this.turbG);
-    this.turbG.connect(this.motor);
+    this.surge = 0;
 
     // --- Tyres / road / wind ------------------------------------------------------
     const tyreNoise = e.noiseSource('white');
-    this.squealF1 = e.filter('bandpass', 1050, 9);
-    this.squealF2 = e.filter('bandpass', 1650, 12);
+    this.squealF1 = e.filter('bandpass', 900, 4);
+    this.squealF2 = e.filter('bandpass', 1300, 5);
     this.squealG = e.gain(0);
     tyreNoise.connect(this.squealF1);
     tyreNoise.connect(this.squealF2);
@@ -97,7 +107,7 @@ export class CarAudio {
 
     // --- Metal scrape loop --------------------------------------------------------
     const scrapeN = e.noiseSource('white', 0.8);
-    this.scrapeF = e.filter('bandpass', 2600, 4);
+    this.scrapeF = e.filter('bandpass', 1800, 2);
     this.scrapeTone = e.osc('sawtooth', 137);
     this.scrapeToneF = e.filter('bandpass', 1900, 8);
     this.scrapeG = e.gain(0);
@@ -109,9 +119,9 @@ export class CarAudio {
 
     // --- Thrusters -----------------------------------------------------------------
     const hiss = e.noiseSource('white', 1.1);
-    this.hissF = e.filter('highpass', 3000, 0.8);
-    this.hissF2 = e.filter('peaking', 6500, 2);
-    this.hissF2.gain.value = 8;
+    // Soft cold-gas whoosh (no piercing peak).
+    this.hissF = e.filter('bandpass', 1800, 0.5);
+    this.hissF2 = e.filter('lowpass', 4200, 0.6);
     this.hissG = e.gain(0);
     hiss.connect(this.hissF);
     this.hissF.connect(this.hissF2);
@@ -154,23 +164,25 @@ export class CarAudio {
     const throttle = alive ? c.throttle * (car.energy ? car.energy.powerScale : 1) : 0;
     const regen = alive && c.brake > 0.1 && car.fwdSpeed > 3 ? c.brake : 0;
     this.load = lerp(this.load, Math.max(throttle, regen * 0.6), 1 - Math.exp(-dt * 10));
-    const motorVol = alive ? (ghost ? 0.06 : 1) : 0;
+    const engineVol = clamp(this.e.settings ? this.e.settings.get('engineVolume') ?? 0.8 : 0.8, 0, 1);
+    const motorVol = alive ? (ghost ? 0.06 : 1) * engineVol * engineVol * 1.2 : 0;
     this.set(this.motor.gain, motorVol, 0.15);
-    // Single-speed EV: whine rises with wheel speed.
-    const f = (160 + sp * 24) * ts;
-    this.set(this.whine.frequency, f, 0.03);
-    this.set(this.whine2.frequency, f * 2.01, 0.03);
-    this.set(this.whineF.frequency, f * 1.9 + 300, 0.05);
-    this.set(this.whineG.gain, 0.012 + this.load * 0.14 + Math.min(1, sp / 40) * 0.06, 0.05);
-    this.set(this.sub.frequency, (34 + sp * 0.9) * ts, 0.05);
-    this.set(this.subG.gain, this.load * 0.32 * clamp(1 - sp / 90, 0.25, 1), 0.05);
-    this.set(this.inverter.frequency, (900 + sp * 55) * ts, 0.03);
-    this.set(this.invF.frequency, (1800 + sp * 70) * ts, 0.05);
-    this.set(this.invG.gain, this.load * 0.035 * clamp(1 - sp / 50, 0, 1) + regen * 0.03, 0.05);
-    const turb = clamp((sp - 55) / 35, 0, 1);
-    this.set(this.turbine.frequency, (2200 + sp * 14) * ts, 0.05);
-    this.set(this.turbine2.frequency, (3300 + sp * 21) * ts, 0.05);
-    this.set(this.turbG.gain, turb * (0.02 + this.load * 0.035), 0.08);
+    // Pitch rises with wheel speed but is capped low; the filter opens a little with speed.
+    const f = Math.min(58 + sp * 2.1, 230) * ts;
+    this.set(this.hum.frequency, f, 0.05);
+    this.set(this.hum2.frequency, f * 2, 0.05);
+    this.set(this.hum3.frequency, f * 3, 0.05);
+    this.set(this.humG.gain, 0.05 + this.load * 0.12 + Math.min(1, sp / 50) * 0.05, 0.08);
+    this.set(this.tone.frequency, Math.min(180 + sp * 6.5, 820) * ts, 0.06);
+    this.set(this.toneF.frequency, Math.min(500 + sp * 12, 1600), 0.1);
+    this.set(this.toneG.gain, (0.015 + this.load * 0.035) * clamp(sp / 20, 0, 1), 0.08);
+    this.set(this.motorLP.frequency, Math.min(700 + sp * 14 + this.load * 300, 2000), 0.1);
+    // Punchy surge: a short sub swell when the throttle comes in hard.
+    const dLoad = Math.max(0, throttle - (this.prevThrottle ?? 0));
+    this.prevThrottle = throttle;
+    this.surge = Math.max(this.surge * Math.exp(-dt * 3.5), dLoad > 0.3 ? 1 : 0);
+    this.set(this.sub.frequency, (34 + sp * 0.5) * ts, 0.05);
+    this.set(this.subG.gain, (this.load * 0.18 * clamp(1 - sp / 90, 0.3, 1) + this.surge * 0.22) * (alive ? 1 : 0), 0.04);
 
     // Tyres: squeal from slide amount of grounded wheels on hard surfaces.
     let hard = 0;
@@ -187,8 +199,8 @@ export class CarAudio {
       }
     }
     const squeal = alive && hard ? clamp((slide / hard - 2.2) / 9, 0, 1) : 0;
-    this.set(this.squealG.gain, squeal * 0.22, 0.04);
-    this.set(this.squealToneG.gain, squeal * 0.02, 0.04);
+    this.set(this.squealG.gain, squeal * 0.12, 0.04);
+    this.set(this.squealToneG.gain, 0, 0.04);
     this.set(this.squealTone.frequency, (900 + Math.sin(performance.now() * 0.013) * 60 + squeal * 120) * ts, 0.02);
     this.set(this.squealF1.frequency, (950 + squeal * 250) * ts, 0.05);
     const gnd = grounded / 4;
@@ -203,15 +215,15 @@ export class CarAudio {
     this.set(this.windF.frequency, 300 + v * 22, 0.12);
     // Scrape.
     const scrape = alive ? clamp(car.scrape * clamp(v / 10, 0, 1), 0, 1) : 0;
-    this.set(this.scrapeG.gain, scrape * 0.18, 0.03);
+    this.set(this.scrapeG.gain, scrape * 0.1, 0.03);
     this.set(this.scrapeTone.frequency, 110 + Math.random() * 60, 0.02);
-    this.set(this.scrapeF.frequency, 2000 + Math.random() * 1500, 0.02);
+    this.set(this.scrapeF.frequency, 1400 + Math.random() * 800, 0.02);
 
     // Cold gas hiss bursts (hover / air control) and rocket roar.
     const t = car.thrust;
     const gas = alive ? Math.max(t.hover, t.air ? 0.55 : 0) : 0;
     this.hissLevel = gas > this.hissLevel ? gas : lerp(this.hissLevel, gas, 1 - Math.exp(-dt * 14));
-    this.set(this.hissG.gain, this.hissLevel * 0.2, gas > 0 ? 0.008 : 0.05);
+    this.set(this.hissG.gain, this.hissLevel * 0.14, gas > 0 ? 0.03 : 0.08);
     const roar = alive ? t.rocket : 0;
     this.roarLevel = lerp(this.roarLevel, roar, 1 - Math.exp(-dt * (roar ? 18 : 6)));
     this.set(this.roarG.gain, this.roarLevel * 0.42, 0.02);

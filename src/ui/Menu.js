@@ -9,6 +9,7 @@ import { PAINTS } from '../vehicle/models/CarMaterials.js';
 import { stars } from './ActivityUI.js';
 import { clamp } from '../util/math.js';
 import { DISTRICTS } from '../world/Layout.js';
+import { MUSIC_STYLES } from '../audio/Music.js';
 import { TODS, WEATHERS, makePreset } from '../world/Environment.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -891,8 +892,12 @@ export class Menu {
     if (cat === 'SOUND') {
       items = [
         { type: 'slider', label: 'Master volume', get: () => s.get('masterVolume'), set: set('masterVolume') },
+        { type: 'select', label: 'Music', options: [[true, 'On'], [false, 'Off']], get: () => s.get('musicOn') !== false, set: set('musicOn') },
+        { type: 'select', label: 'Music style', options: Object.entries(MUSIC_STYLES).map(([k, v]) => [k, v.label]), get: () => s.get('musicStyle') || 'synthwave', set: set('musicStyle') },
         { type: 'slider', label: 'Music volume', get: () => s.get('musicVolume'), set: set('musicVolume') },
+        { type: 'slider', label: 'Engine volume', get: () => s.get('engineVolume') ?? 0.8, set: set('engineVolume') },
         { type: 'slider', label: 'SFX volume', get: () => s.get('sfxVolume'), set: set('sfxVolume') },
+        { type: 'slider', label: 'UI volume', get: () => s.get('uiVolume') ?? 0.7, set: set('uiVolume') },
       ];
     } else if (cat === 'VFX') {
       items = [

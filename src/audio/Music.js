@@ -3,8 +3,6 @@
 //   0 pad + soft arp, 1 + bass, 2 + kick/snare, 3 + hats & open filter, 4 + lead, 5 double-time.
 // Ghost Mode and Cold Snap drop everything to a muffled pad.
 
-const BPM = 96;
-const STEP = 60 / BPM / 4; // 16th note
 const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
 
 // Chords as MIDI notes (A minor): i - VI - III - VII, alternating with iv - i - VI - V.
@@ -19,6 +17,40 @@ const MOTIFS = [
   [[2, 12, 2], [4, 15, 2], [6, 17, 2], [8, 19, 3], [11, 22, 3], [14, 19, 2]],
 ];
 
+// V3 music styles: tempo, chords and drum patterns per style (Settings > Sound).
+const CHILL_PROGS = [
+  [[53, 57, 60, 64], [52, 55, 59, 62], [50, 53, 57, 60], [48, 52, 55, 59]],
+  [[50, 53, 57, 60], [55, 59, 62, 65], [52, 55, 59, 62], [57, 60, 64, 67]],
+];
+export const MUSIC_STYLES = {
+  synthwave: {
+    label: 'Synthwave', bpm: 96, progs: PROGS,
+    kick: (s16, i) => (i >= 3 ? s16 % 4 === 0 : s16 % 8 === 0 || s16 === 10),
+    snare: (s16) => s16 === 4 || s16 === 12,
+    hat: (step, s16, hot) => hot || step % 2 === 0,
+    arpDiv: (i, hot) => (hot || i >= 2 ? 1 : 2),
+    levels: null,
+  },
+  chill: {
+    label: 'Chill', bpm: 80, progs: CHILL_PROGS,
+    kick: (s16) => s16 === 0 || s16 === 10,
+    snare: (s16) => s16 === 8,
+    hat: (step) => step % 4 === 2,
+    arpDiv: () => 2,
+    levels: (i) => ({ pad: 0.6, arp: 0.26, bass: 0.4, kick: 0.45, snare: 0.22, hats: 0.16, lead: 0 }),
+    cutoff: (i) => 1800 + i * 500,
+  },
+  dnb: {
+    label: 'Drum & Bass', bpm: 172, progs: PROGS,
+    kick: (s16) => s16 === 0 || s16 === 10,
+    snare: (s16) => s16 === 4 || s16 === 12,
+    hat: (step) => step % 2 === 0,
+    arpDiv: (i) => (i >= 3 ? 2 : 4),
+    levels: (i) => ({ pad: 0.45, arp: i >= 1 ? 0.25 : 0.12, bass: 0.55, kick: 0.75, snare: 0.5, hats: 0.28, lead: i >= 4 ? 0.26 : 0 }),
+    cutoff: (i) => 3500 + i * 2500,
+  },
+};
+
 export class Music {
   constructor(engine) {
     this.e = engine;
@@ -28,7 +60,8 @@ export class Music {
     this.out.connect(this.filter);
     this.filter.connect(e.music);
     this.delay = e.ctx.createDelay(1.5);
-    this.delay.delayTime.value = STEP * 3;
+    this.setStyle('synthwave');
+    this.delay.delayTime.value = this.stepDur * 3;
     this.fb = e.gain(0.38);
     this.delayF = e.filter('lowpass', 2600, 0.7);
     this.delay.connect(this.delayF);
@@ -55,6 +88,13 @@ export class Music {
     this.running = false;
   }
 
+  setStyle(name) {
+    this.st = MUSIC_STYLES[name] || MUSIC_STYLES.synthwave;
+    this.stepDur = 60 / this.st.bpm / 4; // 16th note
+    if (this.delay) this.delay.delayTime.setTargetAtTime(this.stepDur * 3, this.e.now, 0.1);
+    if (this.lastState) this.setState(this.lastState);
+  }
+
   // The sequencer runs on its own timer (independent of the frame rate) and schedules
   // notes ahead on the audio clock, so a slow frame never leaves gaps in the music.
   start() {
@@ -67,6 +107,7 @@ export class Music {
 
   // intensity 0..5; calm = Ghost Mode / Cold Snap (pad only, muffled); menu = title screen.
   setState({ intensity = 0, calm = false, menu = false }) {
+    this.lastState = { intensity, calm, menu };
     const e = this.e;
     const t = e.now;
     this.intensity = intensity;
@@ -85,13 +126,14 @@ export class Music {
             hats: intensity >= 3 ? 0.3 : 0,
             lead: intensity >= 4 ? 0.32 : 0,
           };
+    if (!calm && !menu && this.st.levels) Object.assign(want, this.st.levels(intensity));
     for (const k in want) {
       if (Math.abs(L[k].level - want[k]) > 0.001) {
         L[k].level = want[k];
         L[k].g.gain.setTargetAtTime(want[k], t, want[k] > 0 ? 1.2 : 0.8);
       }
     }
-    const cutoff = calm ? 650 : menu ? 5000 : 2600 + intensity * 3000;
+    const cutoff = calm ? 650 : menu ? 5000 : this.st.cutoff ? this.st.cutoff(intensity) : 2600 + intensity * 3000;
     this.filter.frequency.setTargetAtTime(cutoff, t, 0.6);
   }
 
@@ -103,7 +145,7 @@ export class Music {
     while (this.nextTime < e.now + 0.4) {
       this.schedule(this.step, this.nextTime);
       this.step++;
-      this.nextTime += STEP;
+      this.nextTime += this.stepDur;
     }
   }
 
@@ -111,13 +153,15 @@ export class Music {
     const L = this.layers;
     const s16 = step % 16;
     const bar = Math.floor(step / 16);
-    const prog = PROGS[Math.floor(bar / 8) % 2];
+    const st = this.st;
+    const STEP = this.stepDur;
+    const prog = st.progs[Math.floor(bar / 8) % 2];
     const chord = prog[bar % 4];
     const root = chord[0];
     const hot = this.intensity >= 5 && !this.calm;
     if (s16 === 0 && L.pad.level > 0) this.pad(chord, t, STEP * 16);
     if (L.arp.level > 0) {
-      const div = hot ? 1 : this.intensity >= 2 ? 1 : 2;
+      const div = st.arpDiv(this.intensity, hot);
       if (step % div === 0) {
         const seq = [0, 1, 2, 1, 0, 2, 1, 2];
         const i = (step / div) % 8;
@@ -130,12 +174,11 @@ export class Music {
       this.bass(midi(root - 12 + octave), t, STEP * 1.8, hot);
     }
     if (L.kick.level > 0) {
-      const four = this.intensity >= 3;
-      if (s16 % (four ? 4 : 8) === 0 || (!four && s16 === 10)) this.kick(t);
+      if (st.kick(s16, this.intensity)) this.kick(t);
     }
-    if (L.snare.level > 0 && (s16 === 4 || s16 === 12)) this.snare(t);
+    if (L.snare.level > 0 && st.snare(s16)) this.snare(t);
     if (L.hats.level > 0) {
-      if (hot || step % 2 === 0) this.hat(t, s16 % 4 === 2 ? 0.16 : 0.035, s16 % 4 === 2 ? 0.5 : 0.3);
+      if (st.hat(step, s16, hot)) this.hat(t, s16 % 4 === 2 ? 0.16 : 0.035, s16 % 4 === 2 ? 0.5 : 0.3);
     }
     if (L.lead.level > 0) {
       const motif = MOTIFS[Math.floor(bar / 2) % MOTIFS.length];

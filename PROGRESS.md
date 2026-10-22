@@ -47,7 +47,7 @@ Single source of truth for the design: `GAME_SPEC.md`. Reference photos of the R
 ## Version 3 (UPDATE_V3.md) — branch `v3`
 UPDATE_V3.md replaces UPDATE_V2.md Part 2. Smoke tests: `SCEN=./v3.mjs EXTRA='&menu=1' node tools/smoke.mjs m<N> screenshots/v3m<N>`.
 - [x] **V3 M1 — Unlock everything, map and navigation** (see "V3 M1 results")
-- [ ] V3 M2 — Sound fix and music options
+- [x] **V3 M2 — Sound fix and music options** (see "V3 M2 results")
 - [ ] V3 M3 — Main menu first impression
 - [ ] V3 M4 — In-game HUD
 - [ ] V3 M5 — Thruster control and safe landings
@@ -56,7 +56,18 @@ UPDATE_V3.md replaces UPDATE_V2.md Part 2. Smoke tests: `SCEN=./v3.mjs EXTRA='&m
 - [ ] V3 M8 — Taxi mode
 - [ ] V3 M9 — Kids, Heist, Career, saves, garage
 - [ ] V3 M10 — Polish
-- **Next:** V3 M2.
+- **Next:** V3 M3 (main menu).
+
+## V3 M2 results
+- Motor (`audio/CarAudio.js`) rebuilt: sine fundamental + soft triangle 2nd + faint sine 3rd harmonic through a low-pass
+  (700 Hz rising to max 2 kHz), a gentle speed tone (sine, capped at 820 Hz, low-passed), a sub surge on hard throttle,
+  all through a soft compressor (-22 dB, 3:1). The saw whine, square inverter and 2.6-3.9 kHz turbine layers are gone.
+  Measured under throttle: 0.3% of the output energy above 2.5 kHz, spectral peak 43 Hz.
+- Softened: tyre squeal (lower, wider band, no chirp tone, half volume), cold-gas hiss (band-pass, no 6.5 kHz peak),
+  metal scrape, sirens (triangle + sine, 1.7 kHz low-pass), EMP, radio squelch, warnings (sine), UI clicks / hovers /
+  buy (short low sines + muted noise taps), popups, Cold Snap shimmer, stingers (triangle instead of saw).
+- Settings > Sound: Master, Music On/Off, Music style (Synthwave 96 BPM, Chill 80 BPM with jazzier 7th chords and soft
+  drums, Drum & Bass 172 BPM with a two-step beat), Music, Engine, SFX and UI volumes. `Music.setStyle()` switches live.
 
 ## V3 M1 results
 - No locks: `Progress.districtOpen()` is always true, briefings and lists never lock, every mode card is open (Free Roam,

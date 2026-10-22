@@ -36,4 +36,42 @@ export default {
     await sleep(3000);
     await shot('hub');
   },
+  // M2: motor spectrum (share of energy above 2.5 kHz), music styles, settings.
+  async m2({ page, sleep, shot, log }) {
+    await page.evaluate(() => __game.startPlay({ district: 'downtown' }));
+    await sleep(1500);
+    await page.keyboard.press('Enter');
+    await sleep(2000);
+    const spec = () => page.evaluate(() => {
+      const a = __game.audio.engine;
+      const n = a.analyser.frequencyBinCount;
+      const d = new Float32Array(n);
+      a.analyser.getFloatFrequencyData(d);
+      const hz = a.ctx.sampleRate / 2 / n;
+      let lo = 0;
+      let hi = 0;
+      let peakHz = 0;
+      let peak = -Infinity;
+      for (let i = 1; i < n; i++) {
+        const p = Math.pow(10, d[i] / 10);
+        if (i * hz > 2500) hi += p;
+        else lo += p;
+        if (d[i] > peak) { peak = d[i]; peakHz = i * hz; }
+      }
+      return { highShare: +(hi / (hi + lo + 1e-12)).toFixed(4), peakHz: Math.round(peakHz), rms: +a.level().toFixed(4) };
+    });
+    await page.evaluate(() => { __game.settings.set('musicOn', false); });
+    await page.keyboard.down('KeyW');
+    await sleep(4000);
+    log('motor under throttle', JSON.stringify(await spec()), await page.evaluate(() => __game.player.speed.toFixed(1)));
+    await page.keyboard.up('KeyW');
+    for (const st of ['synthwave', 'chill', 'dnb']) {
+      await page.evaluate((st) => { __game.settings.set('musicOn', true); __game.settings.set('sfxVolume', 0); __game.settings.set('engineVolume', 0); __game.settings.set('musicStyle', st); }, st);
+      await sleep(2500);
+      log('music', st, JSON.stringify(await spec()), await page.evaluate(() => __game.audio.music.stepDur.toFixed(3)));
+    }
+    await page.evaluate(() => { __game.settings.set('sfxVolume', 0.9); __game.settings.set('engineVolume', 0.8); __game.settings.set('musicStyle', 'synthwave'); __game.menu.showSettingsCat('title', 'SOUND'); });
+    await sleep(600);
+    await shot('sound');
+  },
 };
