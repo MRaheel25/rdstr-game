@@ -11,6 +11,7 @@ import { clamp } from '../util/math.js';
 import { DISTRICTS } from '../world/Layout.js';
 import { MUSIC_STYLES } from '../audio/Music.js';
 import { TODS, WEATHERS, makePreset } from '../world/Environment.js';
+import { modeShot, districtShot, trackShot, MODE_ACCENTS, DISTRICT_ACCENTS } from './PreviewShots.js';
 
 // V3 menu icons (stroke style, 24 px grid).
 const svg = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
@@ -263,6 +264,7 @@ export class Menu {
       this.items.push(it);
       this.refresh(it);
       if (it.img) el.style.setProperty('--card-img', `url("${it.img}")`);
+      if (it.accent) el.style.setProperty('--card-accent', it.accent);
       const idx = this.items.length - 1;
       el.addEventListener('mouseenter', () => {
         if (this.index !== idx) {
@@ -447,20 +449,22 @@ export class Menu {
       taxi: () => (this.game.startTaxi ? this.game.startTaxi() : this.game.startPlay({})),
       kids: () => this.game.startPlay({ district: 'downtown', tod: 'noon', weather: 'clear', mode: 'kids' }),
     };
-    // Real stills from the city for each mode (rendered once, cached).
-    const SPOT = { free: 'downtown', race: 'highway', heist: 'harbor', career: 'construction', taxi: 'waterfront', kids: 'canyon' };
-    this.modePreviews = this.modePreviews || {};
-    for (const m of modes) {
-      if (this.modePreviews[m.id] === undefined) {
+    // Real stills from the city for each mode: a hand-picked daylight shot of its subject (cached).
+    if (!this.modePreviews) {
+      const shots = modes.map((m) => {
         try {
-          this.modePreviews[m.id] = g.renderPreview(g.world.districtStart(SPOT[m.id]), 480, 300);
+          return modeShot(g, m.id);
         } catch (e) {
-          this.modePreviews[m.id] = null;
+          console.warn('mode shot', m.id, e);
+          return null;
         }
-      }
+      });
+      const imgs = g.renderPreviews(shots, 480, 300);
+      this.modePreviews = {};
+      modes.forEach((m, i) => (this.modePreviews[m.id] = imgs[i]));
     }
     const items = modes.map((m) => ({
-      label: m.label, sub: m.sub, cls: `card big mode-${m.id}`, img: this.modePreviews[m.id],
+      label: m.label, sub: m.sub, cls: `card big mode-${m.id}`, img: this.modePreviews[m.id], accent: MODE_ACCENTS[m.id],
       action: () => {
         this.playSetup = { mode: m.id };
         if (MODE_ACTION[m.id]) MODE_ACTION[m.id]();
@@ -482,15 +486,18 @@ export class Menu {
     this.screen = 'race-setup';
     this.enterShowroom('title');
     const defs = g.activities.defs.filter((d) => d.kind === 'race');
-    this.trackPreviews = this.trackPreviews || {};
-    const items = defs.map((d) => {
-      if (this.trackPreviews[d.id] === undefined) {
+    if (!this.trackPreviews) {
+      const imgs = g.renderPreviews(defs.map((d) => {
         try {
-          this.trackPreviews[d.id] = g.renderPreview({ position: d.start.clone(), yaw: d.yaw || 0 }, 480, 300);
+          return trackShot(g, d);
         } catch (e) {
-          this.trackPreviews[d.id] = null;
+          return { position: d.start.clone(), yaw: d.yaw || 0 };
         }
-      }
+      }), 480, 300);
+      this.trackPreviews = {};
+      defs.forEach((d, i) => (this.trackPreviews[d.id] = imgs[i]));
+    }
+    const items = defs.map((d) => {
       const rec = g.progress.data.races[d.id];
       const kind = d.scoring === 'drift' ? 'DRIFT RUN' : `${d.laps} LAPS`;
       return {
@@ -539,20 +546,23 @@ export class Menu {
   showPlayStep2() {
     const g = this.game;
     const p = g.progress;
-    this.previews = this.previews || {};
+    if (!this.previews) {
+      const imgs = g.renderPreviews(DISTRICTS.map((d) => {
+        try {
+          return districtShot(g, d.id);
+        } catch (e) {
+          return g.world.districtStart(d.id);
+        }
+      }), 480, 300);
+      this.previews = {};
+      DISTRICTS.forEach((d, i) => (this.previews[d.id] = imgs[i]));
+    }
     const items = DISTRICTS.map((d) => {
       const open = true;
-      if (!this.previews[d.id]) {
-        try {
-          this.previews[d.id] = g.renderPreview(g.world.districtStart(d.id));
-        } catch (e) {
-          this.previews[d.id] = null;
-        }
-      }
       const rep = (DISTRICT_UNLOCKS.find((u) => u.id === d.id) || {}).rep;
       return {
         label: d.name.toUpperCase(), sub: open ? DISTRICT_BLURB[d.id] || '' : `LOCKED · ${rep || '?'} REP`, disabled: !open,
-        cls: `card district-${d.id}`, img: this.previews[d.id],
+        cls: `card district-${d.id}`, img: this.previews[d.id], accent: DISTRICT_ACCENTS[d.id],
         action: () => {
           this.playSetup.district = d.id;
           this.showPlayStep3();

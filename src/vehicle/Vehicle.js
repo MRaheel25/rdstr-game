@@ -250,7 +250,7 @@ export class Vehicle {
     let powerScale = this.powerScale;
     if (energy) powerScale *= energy.powerScale;
     const ghostCap = energy && energy.ghost ? energy.ghostSpeedCap : Infinity;
-    const cap = Math.min(this.speedCap, ghostCap);
+    const cap = Math.min(this.speedCap || Infinity, ghostCap); // 0 / null = no cap
 
     // --- drive / brake demand ---------------------------------------------------
     let driveForce = 0;

@@ -464,14 +464,14 @@ kbd { font-family: var(--mono); font-size: 10px; color: #9fb2c8; border: 1px sol
 .gt.copv.firing svg { stroke: #fff; }
 #thrust-view { width: 120px; height: 120px; display: block; }
 #hud.pos-side #thrust-view { order: -1; }
-#player-tag { position: absolute; left: 22px; bottom: 286px; font-size: 11px; letter-spacing: 4px; color: var(--cyan); font-weight: 800; }
+#player-tag { margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; letter-spacing: 4px; color: var(--cyan); font-weight: 800; }
 #player-tag:empty { display: none; }
 #hud.hide-speed #bottom-right, #hud.hide-battery .gt.batt, #hud.hide-health .gt.hp,
 #hud.hide-thrusters .gt.copv, #hud.hide-thrusters #thrust-view, #hud.hide-minimap #minimap, #hud.hide-score #style-score { display: none !important; }
 #landing-mark { display: none; }
 
 /* ---------------- V3: GPS + full map ---------------- */
-#nav-dist { position: absolute; left: 22px; bottom: 306px; display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px;
+#nav-dist { width: max-content; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px;
   background: var(--glass); font-size: 11px; letter-spacing: 2px; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
 #nav-dist i { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 8px currentColor; }
 #nav-dist span { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(238,244,255,0.8); }
@@ -571,6 +571,28 @@ kbd { font-family: var(--mono); font-size: 10px; color: #9fb2c8; border: 1px sol
 #menu.light .list-detail .ld-brief { background: rgba(255,255,255,0.8); color: #1d2734; }
 #menu.light kbd { background: rgba(16,21,29,0.08); color: #10151d; border-color: rgba(16,21,29,0.2); }
 #menu.light .menu-item.slider input { accent-color: var(--accent); }
+/* Light menus: every value / note readable on white glass (dark-theme rules use white / pale text). */
+#menu.light .menu-item.select .sel, #menu.light .menu-item.select .sel b, #menu.light .menu-item .mi-value b { color: #0b1220; }
+#menu.light .menu-item.select .sel { color: var(--accent); }
+#menu.light .menu-item.focus .mi-label { text-shadow: none; }
+#menu.light .menu-item .mi-num { color: rgba(16, 21, 29, 0.45); }
+#menu.light .menu-item.focus .mi-num, #menu.light .step-head b, #menu.light .slot-lv, #menu.light .panel-title .crumb, #menu.light .title-sub { color: var(--accent); }
+#menu.light .menu-item.back .mi-label, #menu.light .menu-item.exit .mi-label { color: #4a5666; }
+#menu.light .menu-item.danger .mi-label, #menu.light .list-detail .ld-lock, #menu.light .flash-msg { color: #c81e2c; }
+#menu.light .menu-item.bind kbd, #menu.light .player-tag b, #menu.light .info-body b, #menu.light .list-detail .ld-name { color: #10151d; }
+#menu.light .menu-item.bind em, #menu.light .menu-header, #menu.light .panel-title.small, #menu.light .list-detail .ld-type, #menu.light .pause-obj { color: #b25e00; }
+#menu.light .menu-item .mstars span { color: rgba(16, 21, 29, 0.2); }
+#menu.light .menu-item .mstars span.on { color: #e0a000; }
+#menu.light .career { color: #4a5666; }
+#menu.light .career span:first-child, #menu.light .panel-title .cash, #menu.light .list-detail .ld-reward { color: #0f8a3a; }
+#menu.light .career span:nth-child(2) { color: #b25e00; }
+#menu.light .career span:nth-child(3) { color: var(--accent); }
+#menu.light .player-tag span, #menu.light .panel-note, #menu.light .thanks p, #menu.light .info-modes div.soon, #menu.light .garage-hint { color: #4a5666; }
+#menu.light .confirm-panel p, #menu.light .info-body, #menu.light .ctl { color: #1d2734; }
+#menu.light .ctl kbd { color: var(--accent); }
+#menu.light .info-modes div { background: rgba(16, 21, 29, 0.04); }
+#menu.light .slot-empty { color: #8a94a3; }
+#menu.light .name-input { background: rgba(16, 21, 29, 0.06); color: #10151d; }
 /* Big image cards (mode / district / time / weather) */
 .step-head span { font-family: var(--display); font-weight: 700; font-style: normal; letter-spacing: 5px; font-size: 34px; }
 .menu-list.cards { gap: 16px; padding: 10px 4px 16px; scroll-behavior: smooth; }
@@ -584,6 +606,17 @@ kbd { font-family: var(--mono); font-size: 10px; color: #9fb2c8; border: 1px sol
 .menu-item.card .mi-label { font-size: clamp(18px, 1.6vw, 26px); font-style: normal; color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
 .menu-item.card .mi-label small { color: rgba(255,255,255,0.85) !important; font-size: 12px; }
 .menu-item.card .mi-value { background: var(--accent); color: #fff; padding: 2px 8px; border-radius: 4px; font: 700 11px var(--display); letter-spacing: 1px; }
+.menu-item.card { --card-accent: var(--accent); }
+.menu-item.card.focus::before { box-shadow: 0 18px 40px rgba(10, 20, 40, 0.35), inset 0 0 0 2px var(--card-accent) !important; }
+.menu-item.card::after { background: var(--card-accent) !important; box-shadow: 0 0 10px var(--card-accent); }
+/* Subtle colour accent per card: a tinted top edge and a soft wash in the corner. */
+.menu-item.card .mi-label::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--card-accent); opacity: 0.9; border-radius: 12px 12px 0 0; pointer-events: none; }
+.menu-item.card::before { background: radial-gradient(130% 60% at 0% 100%, color-mix(in srgb, var(--card-accent) 38%, transparent), transparent 62%), linear-gradient(180deg, transparent 45%, rgba(5,9,16,0.82)), var(--card-img, linear-gradient(135deg, #1d3a5c, #0b1220)) center / cover !important; }
+.menu-item.card .mi-label { position: static; }
+/* Cards share the row and fit the screen: no horizontal scrollbar. */
+.menu-list.cards { overflow: visible; flex-wrap: nowrap; }
+.menu-item.card { flex: 1 1 0; min-width: 0; width: auto; max-width: 280px; }
+.menu-list.cards::-webkit-scrollbar { display: none; }
 .step-dots i { border-radius: 2px; transform: none; }
 .step-dots i.on { background: var(--accent); box-shadow: none; }
 /* Responsive */
@@ -597,7 +630,8 @@ kbd { font-family: var(--mono); font-size: 10px; color: #9fb2c8; border: 1px sol
   .menu-list { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
   .menu-item .mi-label small { display: none; }
   .menu-foot { display: none; }
-  .menu-item.card { width: 64vw; }
+  .menu-list.cards { overflow-x: auto; scrollbar-width: none; }
+  .menu-item.card { flex: 0 0 auto; width: 64vw; max-width: none; }
   #menu.light.title-screen { background: linear-gradient(0deg, rgba(255,255,255,0.75) 0%, rgba(255,255,255,0.2) 55%, transparent 70%); }
 }
 #menu.light .pc-xp { background: rgba(16, 21, 29, 0.1); }

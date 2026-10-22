@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { CarVisual } from '../CarVisual.js';
 import { buildBody } from './BodyBuilder.js';
 import { makeWheel } from './Wheels.js';
-import { carMat, makePaint, applyPaint, PAINTS, crackTexture } from './CarMaterials.js';
+import { carMat, makePaint, applyPaint, PAINTS, crackTexture, CAR_LIGHTING } from './CarMaterials.js';
 import { textTexture } from '../../world/Textures.js';
 import { clamp, damp } from '../../util/math.js';
 
@@ -454,7 +454,9 @@ export class RoadsterModel extends CarVisual {
     st.lights = damp(st.lights, ghost || (sr && !sr.lights) ? 0 : 1, 8, dt);
     st.brake = damp(st.brake, v.braking ? 1 : 0, 14, dt);
     this.mats.tail.color.setRGB(1, 0.06, 0.12).multiplyScalar((2.4 + st.brake * 6) * st.lights);
-    this.mats.head.color.setRGB(1, 0.97, 0.92).multiplyScalar(6 * st.lights);
+    const day = CAR_LIGHTING.day;
+    this.mats.head.color.setRGB(1, 0.97, 0.92).multiplyScalar((6 - 4.2 * day) * st.lights);
+    this.paint.envMapIntensity = sr ? 1.4 : 1.4 - 0.45 * day;
     this.mats.reverse.color.setRGB(1, 1, 1).multiplyScalar(v.reversing ? 4 * st.lights : 0.15);
     for (const h of this.headlights) h.intensity = 380 * st.lights * (ctx.headlights === false ? 0 : 1);
     // V2 body motion: the shell pitches under braking / acceleration and rolls in corners on

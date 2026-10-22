@@ -1,6 +1,7 @@
 // World: assembles Halcyon Bay (all districts), owns the environment and per-frame world
 // systems (lamp lights near the player, wet-road light streaks, traffic signals, rain,
 // steam, train, beacons) and answers world queries (nearest road, signals, water, cover).
+import { CAR_LIGHTING } from '../vehicle/models/CarMaterials.js';
 import * as THREE from 'three';
 import { CityGenerator } from './CityGenerator.js';
 import { Props } from './Props.js';
@@ -42,9 +43,13 @@ export class World {
     this.env = new Environment(this.scene, this.ctx.renderer.renderer, this.settings);
     this.env.onConditions = (p) => {
       M.setConditions(p.night, p.wet);
+      CAR_LIGHTING.day = 1 - Math.min(1, p.night);
+      if (this.ctx.renderer.setDaylight) this.ctx.renderer.setDaylight(p.night);
       if (this.props && this.props.poolMesh) this.props.poolMesh.visible = p.lampScale > 0.2;
     };
     M.setConditions(this.env.preset.night, this.env.preset.wet);
+    CAR_LIGHTING.day = 1 - Math.min(1, this.env.preset.night);
+    if (this.ctx.renderer.setDaylight) this.ctx.renderer.setDaylight(this.env.preset.night);
     const gen = new CityGenerator(this.ctx);
     gen.props = new Props(this.ctx);
     this.gen = gen;
